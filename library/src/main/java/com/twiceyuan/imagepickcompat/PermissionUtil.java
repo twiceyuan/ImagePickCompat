@@ -26,9 +26,7 @@ public class PermissionUtil {
         }
     }
 
-    public static void grantUriPermission(Context context, List<ResolveInfo> resInfoList, Intent intent, Uri uri) {
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+    public static void grantUriPermission(Context context, List<ResolveInfo> resInfoList, Uri uri) {
         for (ResolveInfo resolveInfo : resInfoList) {
             String packageName = resolveInfo.activityInfo.packageName;
             context.grantUriPermission(packageName, uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);

@@ -2,14 +2,18 @@ package com.twiceyuan.imagepickcompat;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
+import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
 import android.support.v4.content.FileProvider;
 import android.util.Log;
@@ -18,6 +22,9 @@ import android.widget.Toast;
 import com.twiceyuan.imagepickcompat.callback.ImageCallback;
 
 import java.io.File;
+import java.io.FileDescriptor;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,7 +59,17 @@ public class AppCompatImagePick {
         sHandlerMap.put(activity.hashCode(), new SimpleResultHandler(pickRequestCode) {
             @Override
             void handle(Intent data) {
-                callback.call(data.getData());
+                Uri originUri = data.getData();
+                if (originUri == null) {
+                    callback.call(null);
+                    return;
+                }
+
+                if (isRemoteUri(originUri) || isGooglePhotosUri(originUri)) {
+                    callback.call(getImageContentUri(activity, saveBitmapToFile(activity, getBitmapFromUri(activity, originUri))));
+                } else {
+                    callback.call(originUri);
+                }
             }
 
             @Override
@@ -60,6 +77,10 @@ public class AppCompatImagePick {
                 Toast.makeText(activity, "选择取消", Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    private static boolean isGooglePhotosUri(Uri uri) {
+        return uri.getHost().equals("com.google.android.apps.photos.contentprovider");
     }
 
     public static boolean handleResult(Activity activity, int requestCode, int resultCode, Intent intent) {
@@ -75,6 +96,79 @@ public class AppCompatImagePick {
         }
 
         return false;
+    }
+
+    private static boolean isRemoteUri(Uri uri) {
+        String lastPathSegment = uri.getLastPathSegment();
+        return lastPathSegment.startsWith("http");
+    }
+
+    private static Uri getImageContentUri(Context context, File imageFile) {
+        String filePath = imageFile.getAbsolutePath();
+        Cursor cursor = context.getContentResolver().query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                new String[]{MediaStore.Images.Media._ID},
+                MediaStore.Images.Media.DATA + "=? ",
+                new String[]{filePath}, null);
+
+        if (cursor != null && cursor.moveToFirst()) {
+            int id = cursor.getInt(cursor
+                    .getColumnIndex(MediaStore.MediaColumns._ID));
+            cursor.close();
+            Uri baseUri = Uri.parse("content://media/external/images/media");
+            return Uri.withAppendedPath(baseUri, "" + id);
+        } else {
+            if (imageFile.exists()) {
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Images.Media.DATA, filePath);
+                return context.getContentResolver().insert(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            } else {
+                return null;
+            }
+        }
+    }
+
+    private static File saveBitmapToFile(Context context, Bitmap bitmap) {
+        FileOutputStream stream;
+        File file;
+        try {
+            file = createPhotoFile(context);
+            try {
+                stream = new FileOutputStream(file);
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream);
+                return file;
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+                return null;
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private static Bitmap getBitmapFromUri(Context context, Uri uri) {
+        ParcelFileDescriptor parcelFileDescriptor = null;
+        try {
+            parcelFileDescriptor = context.getContentResolver().openFileDescriptor(uri, "r");
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+        FileDescriptor fileDescriptor;
+        if (parcelFileDescriptor != null) {
+            fileDescriptor = parcelFileDescriptor.getFileDescriptor();
+            Bitmap image = BitmapFactory.decodeFileDescriptor(fileDescriptor);
+            try {
+                parcelFileDescriptor.close();
+                return image;
+            } catch (IOException e) {
+                e.printStackTrace();
+                return null;
+            }
+        } else {
+            return null;
+        }
     }
 
     public static void setLogEnable(boolean LOG) {
@@ -172,19 +266,29 @@ public class AppCompatImagePick {
             intent.putExtra("aspectX", 1);
             intent.putExtra("aspectY", 1);
             intent.putExtra("scale", true);
-            intent.putExtra("return-data", true);
+            intent.putExtra("return-data", false);
 
             if (SDK_INT >= Build.VERSION_CODES.N) {
-                PermissionUtil.grantUriPermission(activity, list, intent, uri);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                PermissionUtil.grantUriPermission(activity, list, uri);
             }
 
+//            if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M) {
+            // 没有改行会造成拍照的图片无法进行裁剪
             intent.putExtra(MediaStore.EXTRA_OUTPUT, uri);
+//            }
 //            ResolveInfo res = list.get(0);
 //            intent.setComponent(new ComponentName(res.activityInfo.packageName, res.activityInfo.name));
 
             int cropRequestCode = callback.hashCode();
 
-            activity.startActivityForResult(intent, cropRequestCode);
+            try {
+                activity.startActivityForResult(intent, cropRequestCode);
+            } catch (ActivityNotFoundException e) {
+                Toast.makeText(activity, "没有找到截图应用", Toast.LENGTH_SHORT).show();
+                return;
+            }
 
             sHandlerMap.put(activity.hashCode(), new SimpleResultHandler(cropRequestCode) {
                 @Override
