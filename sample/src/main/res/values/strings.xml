@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">AppCompatImagePick</string>
+    <string name="app_name">ImagePick</string>
     <string name="label_pick_image">选择图片</string>
     <string name="label_pick_and_crop">选择并裁剪</string>
 </resources>

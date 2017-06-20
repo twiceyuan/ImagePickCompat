@@ -1,6 +1,6 @@
 # AppCompat ImagePick
 
-> 状态：开发中
+
 
 调用外部图片应用，提供对外统一的图片选择、裁剪接口。
 
@@ -8,18 +8,24 @@
 
 本库希望实现一个无依赖、界面无关、仅提供选择、裁剪接口的图片工具，来简化这部分需求时的适配工作。
 
+* 界面无关
+* 无依赖
+* 兼容 Google Photos 以及大多数 ROM 自带相册应用
+* 适配 FileProvider
+* 统一回调 `content://` 格式 Uri
+
 ## 使用
 
 ```java
 // 拍照
-AppCompatImagePick.pickCamera(this, imageUri -> mImgPickResult.setImageURI(imageUri));
+ImagePick.pickCamera(this, imageUri -> mImgPickResult.setImageURI(imageUri));
 
 // 选择图片
-AppCompatImagePick.pickGallery(this, imageUri -> mImgPickResult.setImageURI(imageUri));
+ImagePick.pickGallery(this, imageUri -> mImgPickResult.setImageURI(imageUri));
 
 // 拍照并且裁剪
-AppCompatImagePick.pickCamera(this, imageUri ->
-    AppCompatImagePick.crop(this, imageUri, croppedUri ->
+ImagePick.takePhoto(this, imageUri ->
+    ImagePick.crop(this, imageUri, croppedUri ->
             mImgPickResult.setImageURI(imageUri)));
 ```
 
