@@ -1,5 +1,7 @@
 # AppCompat ImagePick
 
+[![](https://jitpack.io/v/twiceyuan/ImagePickCompat.svg)](https://jitpack.io/#twiceyuan/ImagePickCompat)
+<a href="http://www.methodscount.com/?lib=com.github.twiceyuan%3AImagePickCompat%3A0.1"><img src="https://img.shields.io/badge/Size-16 KB-e91e63.svg"/></a>
 
 
 调用外部图片应用，提供对外统一的图片选择、裁剪接口。
@@ -15,6 +17,20 @@
 * 统一回调 `content://` 格式 Uri
 
 ## 使用
+
+添加配置
+
+```
+repositories {
+    ...
+    maven { url 'https://jitpack.io' }
+}
+```
+```
+dependencies {
+    compile 'com.github.twiceyuan:ImagePickCompat:0.1'  
+}
+```
 
 ```java
 // 拍照
@@ -98,3 +114,21 @@ ImagePick.takePhoto(this, imageUri ->
 ## 非功能性问题
 
 * [ ] 截图图片之后会出现截取结果在相册中（重现方式：先用快图选择、然后用 Google Photos 截取，之后有很大几率发生崩溃，崩溃后相册会有截取后的结果图片）
+
+## License
+
+```
+Copyright 2017 twiceYuan.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
