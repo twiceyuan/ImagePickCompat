@@ -18,7 +18,7 @@ import android.widget.ImageView;
 import android.widget.Toast;
 
 import com.twiceyuan.appcompatimagepick.R;
-import com.twiceyuan.imagepickcompat.AppCompatImagePick;
+import com.twiceyuan.imagepickcompat.ImagePick;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -45,11 +45,11 @@ public class MainActivity extends Activity {
                 Arrays.asList("从相机选择", "从相册选择")
         ), (dialog, which) -> {
             if (which == 0) {
-                AppCompatImagePick.pickCamera(this, this::setImage);
+                ImagePick.pickCamera(this, this::setImage);
             }
             if (which == 1) {
-                checkReadStoragePermission(() -> AppCompatImagePick.pickGallery(this,
-                        this::setImage));
+                //noinspection MissingPermission
+                requestReadStoragePermission(() -> ImagePick.pickGallery(this, this::setImage));
             }
         }).show());
 
@@ -59,13 +59,13 @@ public class MainActivity extends Activity {
                 Arrays.asList("从相机选择并裁剪", "从相册选择并裁剪")
         ), (dialog, which) -> {
             if (which == 0) {
-                AppCompatImagePick.pickCamera(this, imageUri ->
-                        AppCompatImagePick.crop(this, imageUri, this::setImage));
+                ImagePick.pickCamera(this, imageUri ->
+                        ImagePick.crop(this, imageUri, this::setImage));
             }
             if (which == 1) {
-                checkReadStoragePermission(() ->
-                        AppCompatImagePick.pickGallery(this, imageUri ->
-                                AppCompatImagePick.crop(this, imageUri, this::setImage)));
+                //noinspection MissingPermission
+                requestReadStoragePermission(() -> ImagePick.pickGallery(this, imageUri ->
+                        ImagePick.crop(this, imageUri, this::setImage)));
             }
         }).show());
     }
@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    public void checkReadStoragePermission(Callback callback) {
+    public void requestReadStoragePermission(Callback callback) {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
             callback.call();
         } else {
@@ -109,7 +109,7 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
-        if (AppCompatImagePick.handleResult(this, requestCode, resultCode, data)) {
+        if (ImagePick.handleResult(this, requestCode, resultCode, data)) {
             //noinspection UnnecessaryReturnStatement
             return;
         }
@@ -121,7 +121,7 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
 
-        AppCompatImagePick.clearImageDir(this);
+        ImagePick.clearImageDir(this);
     }
 
     private void initView() {

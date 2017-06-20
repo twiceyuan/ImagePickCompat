@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="provider_name">.image_provider</string>
+    <string name="no_gallery_app">设备上没有找到图片浏览器应用</string>
+    <string name="cancel_choose">选择取消</string>
+    <string name="no_crop_app">没有找到裁剪应用</string>
+    <string name="no_camera_app">设备上没有找到相机应用</string>
+    <string name="cancel_take_photo">取消拍照</string>
+</resources>
