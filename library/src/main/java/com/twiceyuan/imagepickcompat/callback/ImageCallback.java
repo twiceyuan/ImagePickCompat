@@ -5,7 +5,7 @@ import android.net.Uri;
 /**
  * Created by twiceYuan on 2017/6/16.
  *
- * 图片回调
+ * Image Choose Callback
  */
 public interface ImageCallback {
     void call(Uri imageUri);
