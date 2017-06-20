@@ -45,7 +45,7 @@ public class MainActivity extends Activity {
                 Arrays.asList("从相机选择", "从相册选择")
         ), (dialog, which) -> {
             if (which == 0) {
-                ImagePick.pickCamera(this, this::setImage);
+                ImagePick.takePhoto(this, this::setImage);
             }
             if (which == 1) {
                 //noinspection MissingPermission
@@ -59,7 +59,7 @@ public class MainActivity extends Activity {
                 Arrays.asList("从相机选择并裁剪", "从相册选择并裁剪")
         ), (dialog, which) -> {
             if (which == 0) {
-                ImagePick.pickCamera(this, imageUri ->
+                ImagePick.takePhoto(this, imageUri ->
                         ImagePick.crop(this, imageUri, this::setImage));
             }
             if (which == 1) {

@@ -19,6 +19,8 @@ import android.widget.Toast;
 import com.twiceyuan.imagepickcompat.callback.Constants;
 import com.twiceyuan.imagepickcompat.callback.ImageCallback;
 import com.twiceyuan.imagepickcompat.options.CropOptions;
+import com.twiceyuan.imagepickcompat.options.PickOptions;
+import com.twiceyuan.imagepickcompat.options.TakeCameraOptions;
 import com.twiceyuan.imagepickcompat.utils.FileProviderUtil;
 import com.twiceyuan.imagepickcompat.utils.PermissionUtil;
 
@@ -45,6 +47,14 @@ public class ImagePick {
     private static Map<Integer, ResultHandler> sHandlerMap = new LinkedHashMap<>();
 
     public static void pickGallery(final Activity activity, final ImageCallback callback) {
+        pickGallery(activity, new PickOptions(), callback);
+    }
+
+    public static void pickGallery(final Activity activity, @NonNull final PickOptions options, final ImageCallback callback) {
+
+        if (options.pickAction != null) {
+            options.pickAction.call();
+        }
 
         //选择图库的图片
         final Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
@@ -53,7 +63,11 @@ public class ImagePick {
         try {
             activity.startActivityForResult(intent, pickRequestCode);
         } catch (ActivityNotFoundException e) {
-            Toast.makeText(activity, R.string.no_gallery_app, Toast.LENGTH_SHORT).show();
+            if (options.noGalleryCallback != null) {
+                options.noGalleryCallback.call();
+            } else {
+                Toast.makeText(activity, R.string.no_gallery_app, Toast.LENGTH_SHORT).show();
+            }
             return;
         }
 
@@ -78,7 +92,11 @@ public class ImagePick {
 
             @Override
             void onCancel() {
-                Toast.makeText(activity, R.string.cancel_choose, Toast.LENGTH_SHORT).show();
+                if (options.cancelAction != null) {
+                    options.cancelAction.call();
+                } else {
+                    Toast.makeText(activity, R.string.cancel_choose, Toast.LENGTH_SHORT).show();
+                }
             }
         });
     }
@@ -117,7 +135,7 @@ public class ImagePick {
 
     /**
      * Fetch a content uri with the file provider api.
-     *
+     * <p>
      * Don’t use Uri.fromFile(). It forces receiving apps to have the READ_EXTERNAL_STORAGE permission, won’t work at
      * all if you are trying to share across users, and in versions of Android lower than 4.4 (API level 19), would
      * require your app to have WRITE_EXTERNAL_STORAGE. And really important share targets, such as the Gmail app,
@@ -176,11 +194,24 @@ public class ImagePick {
         ImagePick.LOG = LOG;
     }
 
-    public static void pickCamera(final Activity activity, final ImageCallback callback) {
+    public static void takePhoto(final Activity activity, final ImageCallback callback) {
+        takePhoto(activity, new TakeCameraOptions(), callback);
+    }
+
+    public static void takePhoto(final Activity activity, @NonNull final TakeCameraOptions options, final ImageCallback callback) {
+
+        if (options.takePhotoAction != null) {
+            options.takePhotoAction.call();
+        }
+
         Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
 
         if (intent.resolveActivity(activity.getPackageManager()) == null) {
-            Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show();
+            if (options.noCameraCallback != null) {
+                options.noCameraCallback.call();
+            } else {
+                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show();
+            }
             return;
         }
 
@@ -203,7 +234,11 @@ public class ImagePick {
             try {
                 activity.startActivityForResult(intent, pickRequestCode);
             } catch (ActivityNotFoundException e) {
-                Toast.makeText(activity, R.string.no_camera_app, Toast.LENGTH_SHORT).show();
+                if (options.noCameraCallback != null) {
+                    options.noCameraCallback.call();
+                } else {
+                    Toast.makeText(activity, R.string.no_camera_app, Toast.LENGTH_SHORT).show();
+                }
                 return;
             }
 
@@ -215,7 +250,11 @@ public class ImagePick {
 
                 @Override
                 void onCancel() {
-                    Toast.makeText(activity, R.string.cancel_take_photo, Toast.LENGTH_SHORT).show();
+                    if (options.cancelAction != null) {
+                        options.cancelAction.call();
+                    } else {
+                        Toast.makeText(activity, R.string.cancel_take_photo, Toast.LENGTH_SHORT).show();
+                    }
                 }
             });
         }
@@ -277,12 +316,17 @@ public class ImagePick {
      * @param callback Crop result callback
      */
     @SuppressWarnings("WeakerAccess")
-    public static void crop(final Activity activity, Uri uri, @NonNull CropOptions options, final ImageCallback callback) {
+    public static void crop(final Activity activity, Uri uri, @NonNull final CropOptions options, final ImageCallback callback) {
         final Intent intent = new Intent("com.android.camera.action.CROP");
         intent.setType("image/*");
         List<ResolveInfo> list = activity.getPackageManager().queryIntentActivities(intent, 0);
         if (list.isEmpty()) {
-            Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show();
+
+            if (options.noCropCallback != null) {
+                options.noCropCallback.call();
+            } else {
+                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show();
+            }
         } else {
             intent.setData(uri);
 
@@ -298,7 +342,7 @@ public class ImagePick {
                 cropFile = createCropFile(activity);
             } catch (IOException e) {
                 e.printStackTrace();
-                Toast.makeText(activity, "无法截取图片，请检查设备存储", Toast.LENGTH_SHORT).show();
+                Toast.makeText(activity, R.string.create_cache_fail, Toast.LENGTH_SHORT).show();
                 return;
             }
 
@@ -324,6 +368,13 @@ public class ImagePick {
                 @Override
                 void handle(Intent data) {
                     callback.call(outputUri);
+                }
+
+                @Override
+                void onCancel() {
+                    if (options.cancelCropCallback != null) {
+                        options.cancelCropCallback.call();
+                    }
                 }
             });
         }

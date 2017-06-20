@@ -1,5 +1,7 @@
 package com.twiceyuan.imagepickcompat.options;
 
+import com.twiceyuan.imagepickcompat.callback.Action;
+
 /**
  * Created by twiceYuan on 2017/6/19.
  * <p>
@@ -12,6 +14,9 @@ public class CropOptions {
     public int     aspectX;
     public int     aspectY;
     public boolean scale;
+
+    public Action noCropCallback;
+    public Action cancelCropCallback;
 
     public CropOptions() {
         outputX = 300;

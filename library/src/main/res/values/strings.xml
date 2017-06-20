@@ -5,4 +5,5 @@
     <string name="no_crop_app">There is no crop app on the device.</string>
     <string name="no_camera_app">There is no camera app on the device.</string>
     <string name="cancel_take_photo">Cancel Take Photo</string>
+    <string name="create_cache_fail">Cannot create temp file, please check storage of device.</string>
 </resources>
