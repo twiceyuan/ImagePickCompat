@@ -43,6 +43,31 @@ ImagePick.pickGallery(this, imageUri -> mImgPickResult.setImageURI(imageUri));
 ImagePick.takePhoto(this, imageUri ->
     ImagePick.crop(this, imageUri, croppedUri ->
             mImgPickResult.setImageURI(imageUri)));
+            
+// 选择并裁剪
+ImagePick.pickGallery(this, imageUri ->
+    ImagePick.crop(this, imageUri, croppedUri ->
+            mImgPickResult.setImageURI(imageUri)));
+```
+
+```java
+// 添加该方法，将 activity result 转发给 ImagePick 的回调
+@Override
+protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+    if (ImagePick.handleResult(this, requestCode, resultCode, data)) return;
+    // other activity result
+}
+```
+
+```java
+// 退出时清除缓存
+@Override
+protected void onDestroy() {
+    super.onDestroy();
+
+    ImagePick.clearImageDir(this);
+}
 ```
 
 ## 兼容
