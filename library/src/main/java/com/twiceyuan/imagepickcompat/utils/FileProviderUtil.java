@@ -4,7 +4,7 @@ import android.content.Context;
 import android.net.Uri;
 import android.support.v4.content.FileProvider;
 
-import com.twiceyuan.imagepickcompat.callback.Constants;
+import com.twiceyuan.imagepickcompat.Constants;
 
 import java.io.File;
 

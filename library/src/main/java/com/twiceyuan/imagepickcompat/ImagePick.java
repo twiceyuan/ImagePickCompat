@@ -16,7 +16,6 @@ import android.support.v4.content.FileProvider;
 import android.util.Log;
 import android.widget.Toast;
 
-import com.twiceyuan.imagepickcompat.callback.Constants;
 import com.twiceyuan.imagepickcompat.callback.ImageCallback;
 import com.twiceyuan.imagepickcompat.options.CropOptions;
 import com.twiceyuan.imagepickcompat.options.PickOptions;
@@ -41,6 +40,8 @@ import java.util.Map;
  * Compatible for Google Photos and Android File Provider.
  */
 public class ImagePick {
+
+    private static final String TAG = "ImagePick";
 
     private static boolean LOG = BuildConfig.DEBUG;
 
@@ -99,6 +100,157 @@ public class ImagePick {
                 }
             }
         });
+    }
+
+    public static void takePhoto(final Activity activity, final ImageCallback callback) {
+        takePhoto(activity, new TakeCameraOptions(), callback);
+    }
+
+    public static void takePhoto(final Activity activity, @NonNull final TakeCameraOptions options, final ImageCallback callback) {
+
+        if (options.takePhotoAction != null) {
+            options.takePhotoAction.call();
+        }
+
+        Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+
+        if (intent.resolveActivity(activity.getPackageManager()) == null) {
+            if (options.noCameraCallback != null) {
+                options.noCameraCallback.call();
+            } else {
+                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show();
+            }
+            return;
+        }
+
+        File photoFile = null;
+        try {
+            photoFile = createPhotoFile(activity);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        if (photoFile != null) {
+            final Uri photoURI = FileProvider.getUriForFile(activity,
+                    activity.getPackageName() + Constants.FILE_PROVIDER_NAME,
+                    photoFile);
+
+            List<ResolveInfo> list = activity.getPackageManager().queryIntentActivities(intent, 0);
+
+            PermissionUtil.grantUriPermission(activity, list, photoURI);
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
+
+            final int pickRequestCode = callback.hashCode();
+
+            try {
+                activity.startActivityForResult(intent, pickRequestCode);
+            } catch (ActivityNotFoundException e) {
+                if (options.noCameraCallback != null) {
+                    options.noCameraCallback.call();
+                } else {
+                    Toast.makeText(activity, R.string.no_camera_app, Toast.LENGTH_SHORT).show();
+                }
+                return;
+            }
+
+            sHandlerMap.put(activity.hashCode(), new SimpleResultHandler(pickRequestCode) {
+                @Override
+                void handle(Intent data) {
+                    callback.call(photoURI);
+                }
+
+                @Override
+                void onCancel() {
+                    if (options.cancelAction != null) {
+                        options.cancelAction.call();
+                    } else {
+                        Toast.makeText(activity, R.string.cancel_take_photo, Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        }
+    }
+
+    /**
+     * Crop use default options
+     * <p>
+     * other see {@link ImagePick#crop(Activity, Uri, CropOptions, ImageCallback)}
+     */
+    public static void crop(final Activity activity, Uri uri, final ImageCallback callback) {
+        crop(activity, uri, new CropOptions(), callback);
+    }
+
+    /**
+     * Crop a image from a uri
+     *
+     * @param activity Context
+     * @param uri      Image Uri
+     * @param options  Crop options
+     * @param callback Crop result callback
+     */
+    @SuppressWarnings("WeakerAccess")
+    public static void crop(final Activity activity, Uri uri, @NonNull final CropOptions options, final ImageCallback callback) {
+        final Intent intent = new Intent("com.android.camera.action.CROP");
+        intent.setType("image/*");
+        List<ResolveInfo> list = activity.getPackageManager().queryIntentActivities(intent, 0);
+        if (list.isEmpty()) {
+
+            if (options.noCropCallback != null) {
+                options.noCropCallback.call();
+            } else {
+                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show();
+            }
+        } else {
+            intent.setData(uri);
+
+            intent.putExtra("outputX", options.outputX);
+            intent.putExtra("outputY", options.outputY);
+            intent.putExtra("aspectX", options.aspectX);
+            intent.putExtra("aspectY", options.aspectY);
+            intent.putExtra("scale", options.scale);
+            intent.putExtra("return-data", false);
+
+            File cropFile;
+            try {
+                cropFile = createCropFile(activity);
+            } catch (IOException e) {
+                e.printStackTrace();
+                Toast.makeText(activity, R.string.create_cache_fail, Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            final Uri outputUri = FileProviderUtil.getUriByFileProvider(activity, cropFile);
+
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            PermissionUtil.grantUriPermission(activity, list, outputUri);
+
+            // 设置裁剪结果输出 uri
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri);
+
+            int cropRequestCode = callback.hashCode();
+
+            try {
+                activity.startActivityForResult(intent, cropRequestCode);
+            } catch (ActivityNotFoundException e) {
+                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            sHandlerMap.put(activity.hashCode(), new SimpleResultHandler(cropRequestCode) {
+                @Override
+                void handle(Intent data) {
+                    callback.call(outputUri);
+                }
+
+                @Override
+                void onCancel() {
+                    if (options.cancelCropCallback != null) {
+                        options.cancelCropCallback.call();
+                    }
+                }
+            });
+        }
     }
 
     /**
@@ -194,72 +346,6 @@ public class ImagePick {
         ImagePick.LOG = LOG;
     }
 
-    public static void takePhoto(final Activity activity, final ImageCallback callback) {
-        takePhoto(activity, new TakeCameraOptions(), callback);
-    }
-
-    public static void takePhoto(final Activity activity, @NonNull final TakeCameraOptions options, final ImageCallback callback) {
-
-        if (options.takePhotoAction != null) {
-            options.takePhotoAction.call();
-        }
-
-        Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-
-        if (intent.resolveActivity(activity.getPackageManager()) == null) {
-            if (options.noCameraCallback != null) {
-                options.noCameraCallback.call();
-            } else {
-                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show();
-            }
-            return;
-        }
-
-        File photoFile = null;
-        try {
-            photoFile = createPhotoFile(activity);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        if (photoFile != null) {
-            final Uri photoURI = FileProvider.getUriForFile(activity,
-                    activity.getPackageName() + activity.getString(R.string.provider_name),
-                    photoFile);
-
-            intent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
-
-            final int pickRequestCode = callback.hashCode();
-
-            try {
-                activity.startActivityForResult(intent, pickRequestCode);
-            } catch (ActivityNotFoundException e) {
-                if (options.noCameraCallback != null) {
-                    options.noCameraCallback.call();
-                } else {
-                    Toast.makeText(activity, R.string.no_camera_app, Toast.LENGTH_SHORT).show();
-                }
-                return;
-            }
-
-            sHandlerMap.put(activity.hashCode(), new SimpleResultHandler(pickRequestCode) {
-                @Override
-                void handle(Intent data) {
-                    callback.call(photoURI);
-                }
-
-                @Override
-                void onCancel() {
-                    if (options.cancelAction != null) {
-                        options.cancelAction.call();
-                    } else {
-                        Toast.makeText(activity, R.string.cancel_take_photo, Toast.LENGTH_SHORT).show();
-                    }
-                }
-            });
-        }
-    }
-
     private static File createPhotoFile(Context context) throws IOException {
         String imageFileName = "IMAGE_PICK_" + System.currentTimeMillis();
         File storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES);
@@ -276,7 +362,7 @@ public class ImagePick {
      * 可以在选择图片的 onDestroy 中调用，清楚拍照的缓存
      */
     public static void clearImageDir(Context context) {
-        File storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+        File storageDir = context.getDir(Constants.CACHE_DIR_NAME, Context.MODE_PRIVATE);
         if (storageDir != null) {
             File[] files = storageDir.listFiles();
             for (File file : files) {
@@ -295,88 +381,6 @@ public class ImagePick {
     private static void log(String message) {
         if (LOG) {
             Log.e(ImagePick.class.getSimpleName(), message);
-        }
-    }
-
-    /**
-     * Crop use default options
-     * <p>
-     * other see {@link ImagePick#crop(Activity, Uri, CropOptions, ImageCallback)}
-     */
-    public static void crop(final Activity activity, Uri uri, final ImageCallback callback) {
-        crop(activity, uri, new CropOptions(), callback);
-    }
-
-    /**
-     * Crop a image from a uri
-     *
-     * @param activity Context
-     * @param uri      Image Uri
-     * @param options  Crop options
-     * @param callback Crop result callback
-     */
-    @SuppressWarnings("WeakerAccess")
-    public static void crop(final Activity activity, Uri uri, @NonNull final CropOptions options, final ImageCallback callback) {
-        final Intent intent = new Intent("com.android.camera.action.CROP");
-        intent.setType("image/*");
-        List<ResolveInfo> list = activity.getPackageManager().queryIntentActivities(intent, 0);
-        if (list.isEmpty()) {
-
-            if (options.noCropCallback != null) {
-                options.noCropCallback.call();
-            } else {
-                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show();
-            }
-        } else {
-            intent.setData(uri);
-
-            intent.putExtra("outputX", options.outputX);
-            intent.putExtra("outputY", options.outputY);
-            intent.putExtra("aspectX", options.aspectX);
-            intent.putExtra("aspectY", options.aspectY);
-            intent.putExtra("scale", options.scale);
-            intent.putExtra("return-data", false);
-
-            File cropFile;
-            try {
-                cropFile = createCropFile(activity);
-            } catch (IOException e) {
-                e.printStackTrace();
-                Toast.makeText(activity, R.string.create_cache_fail, Toast.LENGTH_SHORT).show();
-                return;
-            }
-
-            final Uri outputUri = FileProviderUtil.getUriByFileProvider(activity, cropFile);
-
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-            PermissionUtil.grantUriPermission(activity, list, outputUri);
-
-            // 设置裁剪结果输出 uri
-            intent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri);
-
-            int cropRequestCode = callback.hashCode();
-
-            try {
-                activity.startActivityForResult(intent, cropRequestCode);
-            } catch (ActivityNotFoundException e) {
-                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show();
-                return;
-            }
-
-            sHandlerMap.put(activity.hashCode(), new SimpleResultHandler(cropRequestCode) {
-                @Override
-                void handle(Intent data) {
-                    callback.call(outputUri);
-                }
-
-                @Override
-                void onCancel() {
-                    if (options.cancelCropCallback != null) {
-                        options.cancelCropCallback.call();
-                    }
-                }
-            });
         }
     }
 }
