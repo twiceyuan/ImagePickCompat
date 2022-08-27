@@ -44,6 +44,9 @@ object ImagePick {
     private const val TAG = "ImagePick"
     private val sHandlerMap: MutableMap<Int, ResultHandler> = LinkedHashMap()
 
+    /**
+     * 从相册选择图片，只关心成功结果
+     */
     fun pickGallery(activity: Activity, callback: (Uri) -> Unit) {
         pickGallery(activity, PickCallback {
             if (it is PickResult.Success) {
@@ -52,8 +55,22 @@ object ImagePick {
         })
     }
 
+    /**
+     * 从相册选择图片
+     */
     @Suppress("MemberVisibilityCanBePrivate")
     fun pickGallery(activity: Activity, callback: PickCallback) {
+        kotlin.runCatching {
+            pickGalleryInternal(activity, callback)
+        }.onFailure {
+            callback.onPick(PickResult.Unknown(it))
+        }
+    }
+
+    /**
+     * 从相册选择图片
+     */
+    private fun pickGalleryInternal(activity: Activity, callback: PickCallback) {
         //选择图库的图片
         val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
         val pickRequestCode = callback.hashCode()
@@ -92,6 +109,9 @@ object ImagePick {
         }
     }
 
+    /**
+     * 调用相机拍照，只关心成功结果
+     */
     fun takePhoto(activity: Activity, callback: (Uri) -> Unit) {
         takePhoto(activity, TakePhotoCallback {
             if (it is TakePhotoResult.Success) {
@@ -100,6 +120,9 @@ object ImagePick {
         })
     }
 
+    /**
+     * 调用相机拍照
+     */
     @Suppress("MemberVisibilityCanBePrivate")
     fun takePhoto(activity: Activity, callback: TakePhotoCallback) {
         kotlin.runCatching {
@@ -109,8 +132,7 @@ object ImagePick {
         }
     }
 
-    @Suppress("MemberVisibilityCanBePrivate")
-    fun takePhotoInternal(activity: Activity, callback: TakePhotoCallback) {
+    private fun takePhotoInternal(activity: Activity, callback: TakePhotoCallback) {
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
         if (intent.resolveActivity(activity.packageManager) == null) {
             callback.onTake(TakePhotoResult.NoCamera)
