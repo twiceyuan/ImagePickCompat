@@ -10,6 +10,7 @@ import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.util.Log
+import androidx.activity.ComponentActivity
 import androidx.core.content.FileProvider
 import com.twiceyuan.imagepickcompat.options.CropOptions
 import com.twiceyuan.imagepickcompat.result.CropCallback
@@ -18,10 +19,12 @@ import com.twiceyuan.imagepickcompat.result.PickCallback
 import com.twiceyuan.imagepickcompat.result.PickResult
 import com.twiceyuan.imagepickcompat.result.TakePhotoCallback
 import com.twiceyuan.imagepickcompat.result.TakePhotoResult
-import com.twiceyuan.imagepickcompat.result.onTakeCancel
-import com.twiceyuan.imagepickcompat.result.onTakeSuccess
+import com.twiceyuan.imagepickcompat.utils.ActivityResult
+import com.twiceyuan.imagepickcompat.utils.CommonContract
 import com.twiceyuan.imagepickcompat.utils.FileProviderUtil.getUriByFileProvider
 import com.twiceyuan.imagepickcompat.utils.PermissionUtil.grantUriPermission
+import com.twiceyuan.imagepickcompat.utils.launchWithCallback
+import com.twiceyuan.imagepickcompat.utils.startWithCallback
 import java.io.File
 import java.io.FileDescriptor
 import java.io.FileNotFoundException
@@ -42,12 +45,11 @@ object ImagePick {
 
     private var isLoggable = BuildConfig.DEBUG
     private const val TAG = "ImagePick"
-    private val sHandlerMap: MutableMap<Int, ResultHandler> = LinkedHashMap()
 
     /**
      * 从相册选择图片，只关心成功结果
      */
-    fun pickGallery(activity: Activity, callback: (Uri) -> Unit) {
+    fun pickGallery(activity: ComponentActivity, callback: (Uri) -> Unit) {
         pickGallery(activity, PickCallback {
             if (it is PickResult.Success) {
                 callback(it.uri)
@@ -59,7 +61,7 @@ object ImagePick {
      * 从相册选择图片
      */
     @Suppress("MemberVisibilityCanBePrivate")
-    fun pickGallery(activity: Activity, callback: PickCallback) {
+    fun pickGallery(activity: ComponentActivity, callback: PickCallback) {
         kotlin.runCatching {
             pickGalleryInternal(activity, callback)
         }.onFailure {
@@ -70,41 +72,41 @@ object ImagePick {
     /**
      * 从相册选择图片
      */
-    private fun pickGalleryInternal(activity: Activity, callback: PickCallback) {
+    private fun pickGalleryInternal(activity: ComponentActivity, callback: PickCallback) {
         //选择图库的图片
         val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
-        val pickRequestCode = callback.hashCode()
-        activity.startActivityForResult(intent, pickRequestCode)
-        sHandlerMap[activity.hashCode()] = object : SimpleResultHandler(pickRequestCode) {
-            override fun handle(data: Intent?) {
-                val originUri = data?.data
-                if (originUri == null) {
-                    Log.e(TAG, "handle, originUri is null")
-                    return
-                }
-                if (isRemoteUri(originUri) || isGooglePhotosUri(originUri)) {
-                    // 网络图片或者 Google Photos 的图片没有权限进行进一步操作，所以缓存保存到本地
-                    val bitmapFromUri = getBitmapFromUri(activity, originUri)
-                    if (bitmapFromUri != null) {
-                        val bitmapToFile = saveBitmapToFile(activity, bitmapFromUri)
-                        callback.onPick(
-                            PickResult.Success(
-                                getImageContentUri(
-                                    activity,
-                                    bitmapToFile
+        intent.startWithCallback(activity) {
+            when (it.resultCode) {
+                Activity.RESULT_OK -> {
+                    val originUri = it.result?.data ?: return@startWithCallback run {
+                        callback.onPick(PickResult.Unknown(unknownActivityResult(it)))
+                    }
+                    if (isRemoteUri(originUri) || isGooglePhotosUri(originUri)) {
+                        // 网络图片或者 Google Photos 的图片没有权限进行进一步操作，所以缓存保存到本地
+                        val bitmapFromUri = getBitmapFromUri(activity, originUri)
+                        if (bitmapFromUri != null) {
+                            val bitmapToFile = saveBitmapToFile(activity, bitmapFromUri)
+                            callback.onPick(
+                                PickResult.Success(
+                                    getImageContentUri(
+                                        activity,
+                                        bitmapToFile
+                                    )
                                 )
                             )
-                        )
+                        } else {
+                            callback.onPick(PickResult.Success(originUri))
+                        }
                     } else {
                         callback.onPick(PickResult.Success(originUri))
                     }
-                } else {
-                    callback.onPick(PickResult.Success(originUri))
                 }
-            }
-
-            override fun onCancel() {
-                callback.onPick(PickResult.Cancelled)
+                Activity.RESULT_CANCELED -> {
+                    callback.onPick(PickResult.Cancelled)
+                }
+                else -> {
+                    callback.onPick(PickResult.Unknown(unknownActivityResult(it)))
+                }
             }
         }
     }
@@ -112,7 +114,7 @@ object ImagePick {
     /**
      * 调用相机拍照，只关心成功结果
      */
-    fun takePhoto(activity: Activity, callback: (Uri) -> Unit) {
+    fun takePhoto(activity: ComponentActivity, callback: (Uri) -> Unit) {
         takePhoto(activity, TakePhotoCallback {
             if (it is TakePhotoResult.Success) {
                 callback(it.uri)
@@ -124,7 +126,7 @@ object ImagePick {
      * 调用相机拍照
      */
     @Suppress("MemberVisibilityCanBePrivate")
-    fun takePhoto(activity: Activity, callback: TakePhotoCallback) {
+    fun takePhoto(activity: ComponentActivity, callback: TakePhotoCallback) {
         kotlin.runCatching {
             takePhotoInternal(activity, callback)
         }.onFailure {
@@ -132,7 +134,7 @@ object ImagePick {
         }
     }
 
-    private fun takePhotoInternal(activity: Activity, callback: TakePhotoCallback) {
+    private fun takePhotoInternal(activity: ComponentActivity, callback: TakePhotoCallback) {
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
         if (intent.resolveActivity(activity.packageManager) == null) {
             callback.onTake(TakePhotoResult.NoCamera)
@@ -147,15 +149,17 @@ object ImagePick {
         val list = activity.packageManager.queryIntentActivities(intent, 0)
         grantUriPermission(activity, list, photoURI)
         intent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI)
-        val pickRequestCode = callback.hashCode()
-        activity.startActivityForResult(intent, pickRequestCode)
-        sHandlerMap[activity.hashCode()] = object : SimpleResultHandler(pickRequestCode) {
-            override fun handle(data: Intent?) {
-                callback.onTakeSuccess(photoURI)
-            }
-
-            override fun onCancel() {
-                callback.onTakeCancel()
+        intent.startWithCallback(activity) {
+            when (it.resultCode) {
+                Activity.RESULT_OK -> {
+                    callback.onTake(TakePhotoResult.Success(photoURI))
+                }
+                Activity.RESULT_CANCELED -> {
+                    callback.onTake(TakePhotoResult.Cancelled)
+                }
+                else -> {
+                    callback.onTake(TakePhotoResult.Unknown(unknownActivityResult(it)))
+                }
             }
         }
     }
@@ -166,7 +170,7 @@ object ImagePick {
      *
      * other see [ImagePick.crop]
      */
-    fun crop(activity: Activity, uri: Uri, callback: (Uri) -> Unit) {
+    fun crop(activity: ComponentActivity, uri: Uri, callback: (Uri) -> Unit) {
         crop(activity, uri, CropOptions()) {
             if (it is CropResult.Success) {
                 callback(it.uri)
@@ -181,7 +185,7 @@ object ImagePick {
      * other see [ImagePick.crop]
      */
     @Suppress("MemberVisibilityCanBePrivate")
-    fun crop(activity: Activity, options: CropOptions, uri: Uri, callback: (Uri) -> Unit) {
+    fun crop(activity: ComponentActivity, options: CropOptions, uri: Uri, callback: (Uri) -> Unit) {
         crop(activity, uri, options) {
             if (it is CropResult.Success) {
                 callback(it.uri)
@@ -198,7 +202,7 @@ object ImagePick {
      * @param callback Crop result callback
      */
     @Suppress("MemberVisibilityCanBePrivate")
-    fun crop(activity: Activity, uri: Uri, options: CropOptions, callback: CropCallback) {
+    fun crop(activity: ComponentActivity, uri: Uri, options: CropOptions, callback: CropCallback) {
         val intent = Intent("com.android.camera.action.CROP")
         intent.setDataAndType(uri, "image/*")
         val list = activity.packageManager.queryIntentActivities(intent, 0)
@@ -225,40 +229,31 @@ object ImagePick {
 
         // 设置裁剪结果输出 uri
         intent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri)
-        val cropRequestCode = callback.hashCode()
-        activity.startActivityForResult(intent, cropRequestCode)
-        sHandlerMap[activity.hashCode()] = object : SimpleResultHandler(cropRequestCode) {
-            override fun handle(data: Intent?) {
-                callback.onCrop(CropResult.Success(outputUri))
-            }
-
-            override fun onCancel() {
-                callback.onCrop(CropResult.Cancelled)
+        CommonContract(intent).launchWithCallback(activity.activityResultRegistry, Unit) {
+            when (it.resultCode) {
+                Activity.RESULT_OK -> {
+                    callback.onCrop(CropResult.Success(outputUri))
+                }
+                Activity.RESULT_CANCELED -> {
+                    callback.onCrop(CropResult.Cancelled)
+                }
+                else -> {
+                    callback.onCrop(CropResult.Unknown(unknownActivityResult(it)))
+                }
             }
         }
     }
+
+    private fun unknownActivityResult(it: ActivityResult) =
+        IllegalStateException(
+            "Crop failed: resultCode=${it.resultCode}, data=${it.result}"
+        )
 
     /**
      * Is a google photos uri?
      */
     private fun isGooglePhotosUri(uri: Uri): Boolean {
         return uri.host == Constants.PACKAGE_NAME_GOOGLE_PHOTOS
-    }
-
-    /**
-     * handle pick or crop result data. intercept when it return false.
-     *
-     * @return Return true if data was handled, otherwise return false.
-     */
-    @JvmStatic
-    fun handleResult(
-        activity: Activity,
-        requestCode: Int,
-        resultCode: Int,
-        intent: Intent?
-    ): Boolean {
-        val handler = sHandlerMap[activity.hashCode()] ?: return false
-        return handler.handleResult(requestCode, resultCode, intent)
     }
 
     private fun isRemoteUri(uri: Uri): Boolean {

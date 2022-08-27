@@ -1,20 +1,19 @@
 package com.twiceyuan.appcompatimagepick.sample
 
-import android.app.Activity
 import android.app.AlertDialog
 import android.content.DialogInterface
-import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
 import android.widget.Button
 import android.widget.ImageView
+import androidx.appcompat.app.AppCompatActivity
 import com.twiceyuan.appcompatimagepick.R
 import com.twiceyuan.imagepickcompat.ImagePick
 import java.io.IOException
 
-class MainActivity : Activity() {
+class MainActivity : AppCompatActivity() {
 
     private lateinit var mImgPickResult: ImageView
     private lateinit var mBtnPick: Button
@@ -65,13 +64,6 @@ class MainActivity : Activity() {
             mImgPickResult.setImageBitmap(bitmap)
         } catch (e: IOException) {
             Log.e(TAG, "setImage", e)
-        }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (ImagePick.handleResult(this, requestCode, resultCode, data)) {
-            return
         }
     }
 
