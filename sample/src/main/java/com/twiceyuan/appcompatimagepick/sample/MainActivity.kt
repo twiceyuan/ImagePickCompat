@@ -1,95 +1,103 @@
-package com.twiceyuan.appcompatimagepick.sample;
+package com.twiceyuan.appcompatimagepick.sample
 
-import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.Intent;
-import android.graphics.Bitmap;
-import android.net.Uri;
-import android.os.Bundle;
-import android.provider.MediaStore;
-import android.widget.ArrayAdapter;
-import android.widget.Button;
-import android.widget.ImageView;
+import android.app.Activity
+import android.app.AlertDialog
+import android.content.DialogInterface
+import android.content.Intent
+import android.net.Uri
+import android.os.Bundle
+import android.provider.MediaStore
+import android.util.Log
+import android.view.View
+import android.widget.ArrayAdapter
+import android.widget.Button
+import android.widget.ImageView
+import com.twiceyuan.appcompatimagepick.R
+import com.twiceyuan.imagepickcompat.ImagePick.clearImageDir
+import com.twiceyuan.imagepickcompat.ImagePick.crop
+import com.twiceyuan.imagepickcompat.ImagePick.handleResult
+import com.twiceyuan.imagepickcompat.ImagePick.pickGallery
+import com.twiceyuan.imagepickcompat.ImagePick.takePhoto
+import java.io.IOException
 
-import com.twiceyuan.appcompatimagepick.R;
-import com.twiceyuan.imagepickcompat.ImagePick;
+class MainActivity : Activity() {
 
-import java.io.IOException;
-import java.util.Arrays;
+    private lateinit var mImgPickResult: ImageView
+    private lateinit var mBtnPick: Button
+    private lateinit var mBtnPickCrop: Button
 
-public class MainActivity extends Activity {
-
-    private ImageView mImgPickResult;
-    private Button    mBtnPick;
-    private Button    mBtnPickCrop;
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-        initView();
-
-        mBtnPick.setOnClickListener(v -> new AlertDialog.Builder(this).setAdapter(new ArrayAdapter<>(
-                this,
-                R.layout.simple_list_item,
-                Arrays.asList("从相机选择", "从相册选择")
-        ), (dialog, which) -> {
-            if (which == 0) {
-                ImagePick.takePhoto(this, this::setImage);
-            }
-            if (which == 1) {
-                ImagePick.pickGallery(this, this::setImage);
-            }
-        }).show());
-
-        mBtnPickCrop.setOnClickListener(v -> new AlertDialog.Builder(this).setAdapter(new ArrayAdapter<>(
-                this,
-                R.layout.simple_list_item,
-                Arrays.asList("从相机选择并裁剪", "从相册选择并裁剪")
-        ), (dialog, which) -> {
-            if (which == 0) {
-                ImagePick.takePhoto(this, imageUri ->
-                        ImagePick.crop(this, imageUri, this::setImage));
-            }
-            if (which == 1) {
-                ImagePick.pickGallery(this, imageUri ->
-                        ImagePick.crop(this, imageUri, this::setImage));
-            }
-        }).show());
+    private fun initView() {
+        mImgPickResult = findViewById(R.id.img_pick_result)
+        mBtnPick = findViewById(R.id.btn_pick)
+        mBtnPickCrop = findViewById(R.id.btn_pick_crop)
     }
 
-    private void setImage(Uri imageUri) {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        initView()
+        mBtnPick.setOnClickListener {
+            AlertDialog.Builder(this).setAdapter(
+                ArrayAdapter(
+                    this,
+                    R.layout.simple_list_item,
+                    listOf("从相机选择", "从相册选择")
+                )
+            ) { _: DialogInterface?, which: Int ->
+                if (which == 0) {
+                    takePhoto(this) { imageUri: Uri -> setImage(imageUri) }
+                }
+                if (which == 1) {
+                    pickGallery(this) { setImage(it) }
+                }
+            }.show()
+        }
+        mBtnPickCrop.setOnClickListener {
+            AlertDialog.Builder(this).setAdapter(
+                ArrayAdapter(
+                    this,
+                    R.layout.simple_list_item,
+                    listOf("从相机选择并裁剪", "从相册选择并裁剪")
+                )
+            ) { _: DialogInterface?, which: Int ->
+                if (which == 0) {
+                    takePhoto(this) { imageUri: Uri? ->
+                        crop(this, imageUri) { setImage(it) }
+                    }
+                }
+                if (which == 1) {
+                    pickGallery(this) { imageUri: Uri? ->
+                        crop(this, imageUri) { setImage(it) }
+                    }
+                }
+            }.show()
+        }
+    }
+
+    private fun setImage(imageUri: Uri) {
         try {
-            Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), imageUri);
-            bitmap = BitmapUtil.resize(bitmap);
-            mImgPickResult.setImageBitmap(bitmap);
-        } catch (IOException e) {
-            e.printStackTrace();
+            @Suppress("DEPRECATION")
+            var bitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri)
+            bitmap = BitmapUtil.resize(bitmap)
+            mImgPickResult.setImageBitmap(bitmap)
+        } catch (e: IOException) {
+            Log.e(TAG, "setImage", e)
         }
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-
-        if (ImagePick.handleResult(this, requestCode, resultCode, data)) {
-            //noinspection UnnecessaryReturnStatement
-            return;
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (handleResult(this, requestCode, resultCode, data)) {
+            return
         }
-
-        // other activity result
     }
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-
-        ImagePick.clearImageDir(this);
+    override fun onDestroy() {
+        super.onDestroy()
+        clearImageDir(this)
     }
 
-    private void initView() {
-        mImgPickResult = (ImageView) findViewById(R.id.img_pick_result);
-        mBtnPick = (Button) findViewById(R.id.btn_pick);
-        mBtnPickCrop = (Button) findViewById(R.id.btn_pick_crop);
+    companion object {
+        private const val TAG = "MainActivity"
     }
 }

@@ -1,38 +1,30 @@
-package com.twiceyuan.imagepickcompat;
+package com.twiceyuan.imagepickcompat
 
-import android.app.Activity;
-import android.content.Intent;
+import android.app.Activity
+import android.content.Intent
 
 /**
  * Created by twiceYuan on 2017/6/16.
  *
  * 一般情况使用的 ResultHandler
  */
-public abstract class SimpleResultHandler implements ResultHandler {
-
-    private final int mHandleRequestCode;
-
-    public SimpleResultHandler(int handleRequestCode) {
-        this.mHandleRequestCode = handleRequestCode;
-    }
-
-    @Override
-    public boolean handleResult(int requestCode, int resultCode, Intent intent) {
-        if (requestCode == mHandleRequestCode) {
+abstract class SimpleResultHandler(private val mHandleRequestCode: Int) : ResultHandler {
+    override fun handleResult(requestCode: Int, resultCode: Int, intent: Intent?): Boolean {
+        return if (requestCode == mHandleRequestCode) {
             if (resultCode == Activity.RESULT_OK) {
-                handle(intent);
+                handle(intent)
             } else {
-                onCancel();
+                onCancel()
             }
-            return true;
+            true
         } else {
-            return false;
+            false
         }
     }
 
-    abstract void handle(Intent data);
+    abstract fun handle(data: Intent?)
 
-    void onCancel() {
+    open fun onCancel() {
         // Nothing to do by default, override if need.
     }
 }

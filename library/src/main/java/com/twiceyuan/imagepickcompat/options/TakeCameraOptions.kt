@@ -1,14 +1,12 @@
-package com.twiceyuan.imagepickcompat.options;
-
-import com.twiceyuan.imagepickcompat.callback.Action;
+package com.twiceyuan.imagepickcompat.options
 
 /**
  * Created by twiceYuan on 2017/6/20.
  *
  * 拍照配置选项
  */
-public class TakeCameraOptions {
-    public Action takePhotoAction;
-    public Action cancelAction;
-    public Action noCameraCallback;
-}
+data class TakeCameraOptions(
+    var takePhotoAction: (() -> Unit)? = null,
+    var cancelAction: (() -> Unit)? = null,
+    var noCameraCallback: (() -> Unit)? = null,
+)

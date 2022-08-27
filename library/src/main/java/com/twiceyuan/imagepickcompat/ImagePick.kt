@@ -1,187 +1,169 @@
-package com.twiceyuan.imagepickcompat;
+package com.twiceyuan.imagepickcompat
 
-import android.app.Activity;
-import android.content.ActivityNotFoundException;
-import android.content.Context;
-import android.content.Intent;
-import android.content.pm.ResolveInfo;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.net.Uri;
-import android.os.Environment;
-import android.os.ParcelFileDescriptor;
-import android.provider.MediaStore;
-
-import androidx.annotation.NonNull;
-import androidx.core.content.FileProvider;
-
-import android.util.Log;
-import android.widget.Toast;
-
-import com.twiceyuan.imagepickcompat.callback.ImageCallback;
-import com.twiceyuan.imagepickcompat.options.CropOptions;
-import com.twiceyuan.imagepickcompat.options.PickOptions;
-import com.twiceyuan.imagepickcompat.options.TakeCameraOptions;
-import com.twiceyuan.imagepickcompat.utils.FileProviderUtil;
-import com.twiceyuan.imagepickcompat.utils.PermissionUtil;
-
-import java.io.File;
-import java.io.FileDescriptor;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.os.Environment
+import android.os.ParcelFileDescriptor
+import android.provider.MediaStore
+import android.util.Log
+import android.widget.Toast
+import androidx.core.content.FileProvider
+import com.twiceyuan.imagepickcompat.options.CropOptions
+import com.twiceyuan.imagepickcompat.options.PickOptions
+import com.twiceyuan.imagepickcompat.options.TakeCameraOptions
+import com.twiceyuan.imagepickcompat.utils.FileProviderUtil.getUriByFileProvider
+import com.twiceyuan.imagepickcompat.utils.PermissionUtil.grantUriPermission
+import java.io.File
+import java.io.FileDescriptor
+import java.io.FileNotFoundException
+import java.io.FileOutputStream
+import java.io.IOException
 
 /**
  * Created by twiceYuan on 2017/6/16.
- * <p>
+ *
+ *
  * AppCompatImagePick - Provide universal api to take / pick photo or crop a image.
- * <p>
+ *
+ *
  * Compatible for Google Photos and Android File Provider.
  */
-public class ImagePick {
+@Suppress("TooManyFunctions")
+object ImagePick {
 
-    private static boolean LOG = BuildConfig.DEBUG;
+    private var isLoggable = BuildConfig.DEBUG
+    private const val TAG = "ImagePick"
+    private val sHandlerMap: MutableMap<Int, ResultHandler> = LinkedHashMap()
 
-    private static final Map<Integer, ResultHandler> sHandlerMap = new LinkedHashMap<>();
-
-    public static void pickGallery(final Activity activity, final ImageCallback callback) {
-        pickGallery(activity, new PickOptions(), callback);
+    fun pickGallery(activity: Activity, callback: (Uri) -> Unit) {
+        pickGallery(activity, PickOptions(), callback)
     }
 
-    public static void pickGallery(final Activity activity, @NonNull final PickOptions options, final ImageCallback callback) {
-
+    @Suppress("MemberVisibilityCanBePrivate")
+    fun pickGallery(activity: Activity, options: PickOptions, callback: (Uri) -> Unit) {
         if (options.pickAction != null) {
-            options.pickAction.call();
+            options.pickAction!!.invoke()
         }
 
         //选择图库的图片
-        final Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-        final int pickRequestCode = callback.hashCode();
-
+        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+        val pickRequestCode = callback.hashCode()
         try {
-            activity.startActivityForResult(intent, pickRequestCode);
-        } catch (ActivityNotFoundException e) {
-            if (options.noGalleryCallback != null) {
-                options.noGalleryCallback.call();
+            activity.startActivityForResult(intent, pickRequestCode)
+        } catch (e: ActivityNotFoundException) {
+            Log.e(TAG, "pickGallery", e)
+            val noGalleryCallback = options.noGalleryCallback
+            if (noGalleryCallback != null) {
+                noGalleryCallback.invoke()
             } else {
-                Toast.makeText(activity, R.string.no_gallery_app, Toast.LENGTH_SHORT).show();
+                Toast.makeText(activity, R.string.no_gallery_app, Toast.LENGTH_SHORT).show()
             }
-            return;
+            return
         }
-
-        sHandlerMap.put(activity.hashCode(), new SimpleResultHandler(pickRequestCode) {
-            @Override
-            void handle(Intent data) {
-                Uri originUri = data.getData();
+        sHandlerMap[activity.hashCode()] = object : SimpleResultHandler(pickRequestCode) {
+            override fun handle(data: Intent?) {
+                val originUri = data?.data
                 if (originUri == null) {
-                    callback.call(null);
-                    return;
+                    Log.e(TAG, "handle, originUri is null")
+                    return
                 }
-
                 if (isRemoteUri(originUri) || isGooglePhotosUri(originUri)) {
                     // 网络图片或者 Google Photos 的图片没有权限进行进一步操作，所以缓存保存到本地
-                    Bitmap bitmapFromUri = getBitmapFromUri(activity, originUri);
+                    val bitmapFromUri = getBitmapFromUri(activity, originUri)
                     if (bitmapFromUri != null) {
-                        File bitmapToFile = saveBitmapToFile(activity, bitmapFromUri);
-                        callback.call(getImageContentUri(activity, bitmapToFile));
+                        val bitmapToFile = saveBitmapToFile(activity, bitmapFromUri)
+                        callback(getImageContentUri(activity, bitmapToFile))
                     } else {
-                        callback.call(originUri);
+                        callback(originUri)
                     }
                 } else {
-                    callback.call(originUri);
+                    callback(originUri)
                 }
             }
 
-            @Override
-            void onCancel() {
+            override fun onCancel() {
                 if (options.cancelAction != null) {
-                    options.cancelAction.call();
+                    options.cancelAction!!.invoke()
                 } else {
-                    Toast.makeText(activity, R.string.cancel_choose, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(activity, R.string.cancel_choose, Toast.LENGTH_SHORT).show()
                 }
             }
-        });
-    }
-
-    public static void takePhoto(final Activity activity, final ImageCallback callback) {
-        takePhoto(activity, new TakeCameraOptions(), callback);
-    }
-
-    public static void takePhoto(final Activity activity, @NonNull final TakeCameraOptions options, final ImageCallback callback) {
-
-        if (options.takePhotoAction != null) {
-            options.takePhotoAction.call();
         }
+    }
 
-        Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+    fun takePhoto(activity: Activity, callback: (Uri) -> Unit) {
+        takePhoto(activity, TakeCameraOptions(), callback)
+    }
 
-        if (intent.resolveActivity(activity.getPackageManager()) == null) {
+    @Suppress("MemberVisibilityCanBePrivate")
+    fun takePhoto(activity: Activity, options: TakeCameraOptions, callback: (Uri) -> Unit) {
+        options.takePhotoAction?.invoke()
+        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+        if (intent.resolveActivity(activity.packageManager) == null) {
             if (options.noCameraCallback != null) {
-                options.noCameraCallback.call();
+                options.noCameraCallback!!.invoke()
             } else {
-                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show();
+                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show()
             }
-            return;
+            return
         }
-
-        File photoFile = null;
+        var photoFile: File? = null
         try {
-            photoFile = createPhotoFile(activity);
-        } catch (IOException e) {
-            e.printStackTrace();
+            photoFile = createPhotoFile(activity)
+        } catch (e: IOException) {
+            Log.e(TAG, "takePhoto", e)
         }
-
         if (photoFile != null) {
-            final Uri photoURI = FileProvider.getUriForFile(activity,
-                    activity.getPackageName() + Constants.FILE_PROVIDER_NAME,
-                    photoFile);
-
-            List<ResolveInfo> list = activity.getPackageManager().queryIntentActivities(intent, 0);
-
-            PermissionUtil.grantUriPermission(activity, list, photoURI);
-            intent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
-
-            final int pickRequestCode = callback.hashCode();
-
+            val photoURI = FileProvider.getUriForFile(
+                activity,
+                activity.packageName + Constants.FILE_PROVIDER_NAME,
+                photoFile
+            )
+            val list = activity.packageManager.queryIntentActivities(intent, 0)
+            grantUriPermission(activity, list, photoURI)
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI)
+            val pickRequestCode = callback.hashCode()
             try {
-                activity.startActivityForResult(intent, pickRequestCode);
-            } catch (ActivityNotFoundException e) {
+                activity.startActivityForResult(intent, pickRequestCode)
+            } catch (e: ActivityNotFoundException) {
+                Log.e(TAG, "takePhoto", e)
                 if (options.noCameraCallback != null) {
-                    options.noCameraCallback.call();
+                    options.noCameraCallback!!.invoke()
                 } else {
-                    Toast.makeText(activity, R.string.no_camera_app, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(activity, R.string.no_camera_app, Toast.LENGTH_SHORT).show()
                 }
-                return;
+                return
             }
-
-            sHandlerMap.put(activity.hashCode(), new SimpleResultHandler(pickRequestCode) {
-                @Override
-                void handle(Intent data) {
-                    callback.call(photoURI);
+            sHandlerMap[activity.hashCode()] = object : SimpleResultHandler(pickRequestCode) {
+                override fun handle(data: Intent?) {
+                    callback(photoURI)
                 }
 
-                @Override
-                void onCancel() {
+                override fun onCancel() {
                     if (options.cancelAction != null) {
-                        options.cancelAction.call();
+                        options.cancelAction!!.invoke()
                     } else {
-                        Toast.makeText(activity, R.string.cancel_take_photo, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(activity, R.string.cancel_take_photo, Toast.LENGTH_SHORT)
+                            .show()
                     }
                 }
-            });
+            }
         }
     }
 
     /**
      * Crop use default options
-     * <p>
-     * other see {@link ImagePick#crop(Activity, Uri, CropOptions, ImageCallback)}
+     *
+     *
+     * other see [ImagePick.crop]
      */
-    public static void crop(final Activity activity, Uri uri, final ImageCallback callback) {
-        crop(activity, uri, new CropOptions(), callback);
+    fun crop(activity: Activity, uri: Uri?, callback: (Uri) -> Unit) {
+        crop(activity, uri, CropOptions(), callback)
     }
 
     /**
@@ -192,76 +174,66 @@ public class ImagePick {
      * @param options  Crop options
      * @param callback Crop result callback
      */
-    @SuppressWarnings("WeakerAccess")
-    public static void crop(final Activity activity, Uri uri, @NonNull final CropOptions options, final ImageCallback callback) {
-        final Intent intent = new Intent("com.android.camera.action.CROP");
-        intent.setType("image/*");
-        List<ResolveInfo> list = activity.getPackageManager().queryIntentActivities(intent, 0);
+    @Suppress("MemberVisibilityCanBePrivate")
+    fun crop(activity: Activity, uri: Uri?, options: CropOptions, callback: (Uri) -> Unit) {
+        val intent = Intent("com.android.camera.action.CROP")
+        intent.type = "image/*"
+        val list = activity.packageManager.queryIntentActivities(intent, 0)
         if (list.isEmpty()) {
-
             if (options.noCropCallback != null) {
-                options.noCropCallback.call();
+                options.noCropCallback!!.invoke()
             } else {
-                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show();
+                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show()
             }
         } else {
-            intent.setData(uri);
-
-            intent.putExtra("outputX", options.outputX);
-            intent.putExtra("outputY", options.outputY);
-            intent.putExtra("aspectX", options.aspectX);
-            intent.putExtra("aspectY", options.aspectY);
-            intent.putExtra("scale", options.scale);
-            intent.putExtra("return-data", false);
-
-            File cropFile;
-            try {
-                cropFile = createCropFile(activity);
-            } catch (IOException e) {
-                e.printStackTrace();
-                Toast.makeText(activity, R.string.create_cache_fail, Toast.LENGTH_SHORT).show();
-                return;
+            intent.data = uri
+            intent.putExtra("outputX", options.outputX)
+            intent.putExtra("outputY", options.outputY)
+            intent.putExtra("aspectX", options.aspectX)
+            intent.putExtra("aspectY", options.aspectY)
+            intent.putExtra("scale", options.scale)
+            intent.putExtra("return-data", false)
+            val cropFile: File = try {
+                createCropFile(activity)
+            } catch (e: IOException) {
+                Log.e(TAG, "crop", e)
+                Toast.makeText(activity, R.string.create_cache_fail, Toast.LENGTH_SHORT).show()
+                return
             }
-
-            final Uri outputUri = FileProviderUtil.getUriByFileProvider(activity, cropFile);
-
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-            PermissionUtil.grantUriPermission(activity, list, outputUri);
+            val outputUri = getUriByFileProvider(activity, cropFile)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            grantUriPermission(activity, list, outputUri)
 
             // 设置裁剪结果输出 uri
-            intent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri);
-
-            int cropRequestCode = callback.hashCode();
-
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri)
+            val cropRequestCode = callback.hashCode()
             try {
-                activity.startActivityForResult(intent, cropRequestCode);
-            } catch (ActivityNotFoundException e) {
-                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show();
-                return;
+                activity.startActivityForResult(intent, cropRequestCode)
+            } catch (e: ActivityNotFoundException) {
+                Log.e(TAG, "crop", e)
+                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show()
+                return
             }
-
-            sHandlerMap.put(activity.hashCode(), new SimpleResultHandler(cropRequestCode) {
-                @Override
-                void handle(Intent data) {
-                    callback.call(outputUri);
+            sHandlerMap[activity.hashCode()] = object : SimpleResultHandler(cropRequestCode) {
+                override fun handle(data: Intent?) {
+                    callback(outputUri)
                 }
 
-                @Override
-                void onCancel() {
+                override fun onCancel() {
                     if (options.cancelCropCallback != null) {
-                        options.cancelCropCallback.call();
+                        options.cancelCropCallback!!.invoke()
                     }
                 }
-            });
+            }
         }
     }
 
     /**
      * Is a google photos uri?
      */
-    private static boolean isGooglePhotosUri(Uri uri) {
-        return uri.getHost().equals(Constants.PACKAGE_NAME_GOOGLE_PHOTOS);
+    private fun isGooglePhotosUri(uri: Uri): Boolean {
+        return uri.host == Constants.PACKAGE_NAME_GOOGLE_PHOTOS
     }
 
     /**
@@ -269,29 +241,26 @@ public class ImagePick {
      *
      * @return Return true if data was handled, otherwise return false.
      */
-    public static boolean handleResult(Activity activity, int requestCode, int resultCode, Intent intent) {
-        ResultHandler handler = sHandlerMap.get(activity.hashCode());
-
-        if (handler == null) {
-            return false;
-        }
-
-        //noinspection RedundantIfStatement
-        if (handler.handleResult(requestCode, resultCode, intent)) {
-            return true;
-        }
-
-        return false;
+    @JvmStatic
+    fun handleResult(
+        activity: Activity,
+        requestCode: Int,
+        resultCode: Int,
+        intent: Intent?
+    ): Boolean {
+        val handler = sHandlerMap[activity.hashCode()] ?: return false
+        return handler.handleResult(requestCode, resultCode, intent)
     }
 
-    private static boolean isRemoteUri(Uri uri) {
-        String lastPathSegment = uri.getLastPathSegment();
-        return lastPathSegment.startsWith("http");
+    private fun isRemoteUri(uri: Uri): Boolean {
+        val lastPathSegment = uri.lastPathSegment
+        return lastPathSegment!!.startsWith("http")
     }
 
     /**
      * Fetch a content uri with the file provider api.
-     * <p>
+     *
+     *
      * Don’t use Uri.fromFile(). It forces receiving apps to have the READ_EXTERNAL_STORAGE permission, won’t work at
      * all if you are trying to share across users, and in versions of Android lower than 4.4 (API level 19), would
      * require your app to have WRITE_EXTERNAL_STORAGE. And really important share targets, such as the Gmail app,
@@ -300,81 +269,87 @@ public class ImagePick {
      * Uri.fromFile(), they do work on Uris associated with Content Providers. Rather than implement your own just for
      * this, you can and should use FileProvider as explained in File Sharing.
      */
-    private static Uri getImageContentUri(Context context, File imageFile) {
-        return FileProvider.getUriForFile(context, context.getPackageName() + ".image_provider", imageFile);
+    private fun getImageContentUri(context: Context, imageFile: File?): Uri {
+        return FileProvider.getUriForFile(
+            context,
+            context.packageName + ".image_provider",
+            imageFile!!
+        )
     }
 
-    private static File saveBitmapToFile(Context context, Bitmap bitmap) {
-        FileOutputStream stream;
-        File file;
-        try {
-            file = createPhotoFile(context);
+    private fun saveBitmapToFile(context: Context, bitmap: Bitmap): File? {
+        val stream: FileOutputStream
+        val file: File
+        return try {
+            file = createPhotoFile(context)
             try {
-                stream = new FileOutputStream(file);
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream);
-                return file;
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
-                return null;
+                stream = FileOutputStream(file)
+                @Suppress("MagicNumber")
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
+                file
+            } catch (e: FileNotFoundException) {
+                Log.e(TAG, "saveBitmapToFile", e)
+                null
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-            return null;
+        } catch (e: IOException) {
+            Log.e(TAG, "saveBitmapToFile", e)
+            null
         }
     }
 
-    private static Bitmap getBitmapFromUri(Context context, Uri uri) {
-        ParcelFileDescriptor parcelFileDescriptor = null;
+    private fun getBitmapFromUri(context: Context, uri: Uri): Bitmap? {
+        var parcelFileDescriptor: ParcelFileDescriptor? = null
         try {
-            parcelFileDescriptor = context.getContentResolver().openFileDescriptor(uri, "r");
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
+            parcelFileDescriptor = context.contentResolver.openFileDescriptor(uri, "r")
+        } catch (e: FileNotFoundException) {
+            Log.e(TAG, "getBitmapFromUri", e)
         }
-        FileDescriptor fileDescriptor;
-        if (parcelFileDescriptor != null) {
-            fileDescriptor = parcelFileDescriptor.getFileDescriptor();
-            Bitmap image = BitmapFactory.decodeFileDescriptor(fileDescriptor);
+        val fileDescriptor: FileDescriptor
+        return if (parcelFileDescriptor != null) {
+            fileDescriptor = parcelFileDescriptor.fileDescriptor
+            val image = BitmapFactory.decodeFileDescriptor(fileDescriptor)
             try {
-                parcelFileDescriptor.close();
-                return image;
-            } catch (IOException e) {
-                e.printStackTrace();
-                return null;
+                parcelFileDescriptor.close()
+                image
+            } catch (e: IOException) {
+                Log.e(TAG, "getBitmapFromUri", e)
+                null
             }
         } else {
-            return null;
+            null
         }
     }
 
-    @SuppressWarnings("unused")
-    public static void setLogEnable(boolean LOG) {
-        ImagePick.LOG = LOG;
+    @Suppress("unused")
+    fun setLogEnable(isLoggable: Boolean) {
+        this.isLoggable = isLoggable
     }
 
-    private static File createPhotoFile(Context context) throws IOException {
-        String imageFileName = "IMAGE_PICK_" + System.currentTimeMillis();
-        File storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES);
-        return File.createTempFile(imageFileName, ".jpg", storageDir);
+    @Throws(IOException::class)
+    private fun createPhotoFile(context: Context): File {
+        val imageFileName = "IMAGE_PICK_" + System.currentTimeMillis()
+        val storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+        return File.createTempFile(imageFileName, ".jpg", storageDir)
     }
 
-    private static File createCropFile(Context context) throws IOException {
-        String imageFileName = "CROP_" + System.currentTimeMillis();
-        File storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES);
-        return File.createTempFile(imageFileName, ".jpg", storageDir);
+    @Throws(IOException::class)
+    private fun createCropFile(context: Context): File {
+        val imageFileName = "CROP_" + System.currentTimeMillis()
+        val storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+        return File.createTempFile(imageFileName, ".jpg", storageDir)
     }
 
     /**
      * 可以在选择图片的 onDestroy 中调用，清楚拍照的缓存
      */
-    public static void clearImageDir(Context context) {
-        File storageDir = context.getDir(Constants.CACHE_DIR_NAME, Context.MODE_PRIVATE);
-        if (storageDir != null) {
-            File[] files = storageDir.listFiles();
-            if (files != null) {
-                for (File file : files) {
-                    if (!file.delete()) {
-                        log("文件删除失败: " + file);
-                    }
+    @JvmStatic
+    fun clearImageDir(context: Context) {
+        val storageDir = context.getDir(Constants.CACHE_DIR_NAME, Context.MODE_PRIVATE) ?: return
+        val files = storageDir.listFiles()
+        if (files != null) {
+            for (file in files) {
+                if (!file.delete()) {
+                    log("文件删除失败: $file")
                 }
             }
         }
@@ -385,9 +360,9 @@ public class ImagePick {
      *
      * @param message log message
      */
-    private static void log(String message) {
-        if (LOG) {
-            Log.e(ImagePick.class.getSimpleName(), message);
+    private fun log(message: String) {
+        if (isLoggable) {
+            Log.e(ImagePick::class.java.simpleName, message)
         }
     }
 }

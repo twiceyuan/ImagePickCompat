@@ -1,28 +1,17 @@
-package com.twiceyuan.imagepickcompat.options;
-
-import com.twiceyuan.imagepickcompat.callback.Action;
+package com.twiceyuan.imagepickcompat.options
 
 /**
  * Created by twiceYuan on 2017/6/19.
- * <p>
+ *
+ *
  * Options about crop action.
  */
-public class CropOptions {
-
-    public int     outputX;
-    public int     outputY;
-    public int     aspectX;
-    public int     aspectY;
-    public boolean scale;
-
-    public Action noCropCallback;
-    public Action cancelCropCallback;
-
-    public CropOptions() {
-        outputX = 300;
-        outputY = 300;
-        aspectX = 1;
-        aspectY = 1;
-        scale = true;
-    }
-}
+data class CropOptions(
+    var outputX: Int = 300,
+    var outputY: Int = 300,
+    var aspectX: Int = 1,
+    var aspectY: Int = 1,
+    var scale: Boolean = true,
+    var noCropCallback: (() -> Unit)? = null,
+    var cancelCropCallback: (() -> Unit)? = null,
+)
