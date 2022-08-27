@@ -9,7 +9,6 @@
 本库希望实现一个无依赖、界面无关、仅提供选择/裁剪接口的图片工具，来简化这部分需求时的适配工作。
 
 * 界面无关
-* 仅 `androidx.legacy:legacy-support-v4`
 * 无需读写存储权限
 * 兼容 Google Photos （包括非本地 Uri）以及大多数 ROM 自带相册应用
 * 适配 FileProvider
