@@ -11,8 +11,10 @@ import android.net.Uri;
 import android.os.Environment;
 import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
-import android.support.annotation.NonNull;
-import android.support.v4.content.FileProvider;
+
+import androidx.annotation.NonNull;
+import androidx.core.content.FileProvider;
+
 import android.util.Log;
 import android.widget.Toast;
 
@@ -41,11 +43,9 @@ import java.util.Map;
  */
 public class ImagePick {
 
-    private static final String TAG = "ImagePick";
-
     private static boolean LOG = BuildConfig.DEBUG;
 
-    private static Map<Integer, ResultHandler> sHandlerMap = new LinkedHashMap<>();
+    private static final Map<Integer, ResultHandler> sHandlerMap = new LinkedHashMap<>();
 
     public static void pickGallery(final Activity activity, final ImageCallback callback) {
         pickGallery(activity, new PickOptions(), callback);
@@ -84,8 +84,12 @@ public class ImagePick {
                 if (isRemoteUri(originUri) || isGooglePhotosUri(originUri)) {
                     // 网络图片或者 Google Photos 的图片没有权限进行进一步操作，所以缓存保存到本地
                     Bitmap bitmapFromUri = getBitmapFromUri(activity, originUri);
-                    File bitmapToFile = saveBitmapToFile(activity, bitmapFromUri);
-                    callback.call(getImageContentUri(activity, bitmapToFile));
+                    if (bitmapFromUri != null) {
+                        File bitmapToFile = saveBitmapToFile(activity, bitmapFromUri);
+                        callback.call(getImageContentUri(activity, bitmapToFile));
+                    } else {
+                        callback.call(originUri);
+                    }
                 } else {
                     callback.call(originUri);
                 }
@@ -342,6 +346,7 @@ public class ImagePick {
         }
     }
 
+    @SuppressWarnings("unused")
     public static void setLogEnable(boolean LOG) {
         ImagePick.LOG = LOG;
     }
@@ -365,9 +370,11 @@ public class ImagePick {
         File storageDir = context.getDir(Constants.CACHE_DIR_NAME, Context.MODE_PRIVATE);
         if (storageDir != null) {
             File[] files = storageDir.listFiles();
-            for (File file : files) {
-                if (!file.delete()) {
-                    log("文件删除失败: " + String.valueOf(file));
+            if (files != null) {
+                for (File file : files) {
+                    if (!file.delete()) {
+                        log("文件删除失败: " + file);
+                    }
                 }
             }
         }
