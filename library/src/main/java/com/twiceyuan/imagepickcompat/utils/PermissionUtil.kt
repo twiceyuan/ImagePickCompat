@@ -10,9 +10,9 @@ import android.net.Uri
  *
  * 权限工具
  */
-object PermissionUtil {
-    @JvmStatic
-    fun grantUriPermission(context: Context, resInfoList: List<ResolveInfo>, uri: Uri?) {
+internal object PermissionUtil {
+
+    fun grantUriPermission(context: Context, resInfoList: List<ResolveInfo>, uri: Uri) {
         for (resolveInfo in resInfoList) {
             val packageName = resolveInfo.activityInfo.packageName
             context.grantUriPermission(

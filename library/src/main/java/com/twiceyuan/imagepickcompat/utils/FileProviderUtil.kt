@@ -11,13 +11,10 @@ import java.io.File
  *
  * File Provider util
  */
-object FileProviderUtil {
-    @JvmStatic
-    fun getUriByFileProvider(context: Context, file: File?): Uri {
-        return FileProvider.getUriForFile(
-            context,
-            context.packageName + Constants.FILE_PROVIDER_NAME,
-            file!!
-        )
+internal object FileProviderUtil {
+
+    fun getUriByFileProvider(context: Context, file: File): Uri {
+        val authority = context.packageName + Constants.FILE_PROVIDER_NAME
+        return FileProvider.getUriForFile(context, authority, file)
     }
 }

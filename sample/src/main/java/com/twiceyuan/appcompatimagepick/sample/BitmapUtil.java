@@ -14,7 +14,7 @@ public class BitmapUtil {
     static Bitmap resize(Bitmap bitmap) {
         int width = bitmap.getWidth();
         int height = bitmap.getHeight();
-        int largeLength = width > height ? width : height;
+        int largeLength = Math.max(width, height);
         if (largeLength > 2048) {
             float scale = 2048f / largeLength;
             Matrix scaleMatrix = new Matrix();

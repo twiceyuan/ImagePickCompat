@@ -1,38 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:gravity="center"
     android:orientation="vertical"
+    android:padding="16dp"
     tools:context="com.twiceyuan.appcompatimagepick.sample.MainActivity">
 
-    <ImageView
-        android:id="@+id/img_pick_result"
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:scaleType="centerInside"
-        android:contentDescription="@string/app_name"/>
+        android:layout_height="400dp"
+        android:background="#ccc">
+
+        <ImageView
+            android:id="@+id/img_pick_result"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:contentDescription="@string/app_name"
+            android:scaleType="fitXY" />
+
+    </FrameLayout>
+
+    <Space
+        android:layout_width="0dp"
+        android:layout_height="20dp" />
 
     <LinearLayout
-        android:orientation="horizontal"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
 
         <Button
             android:id="@+id/btn_pick"
             android:layout_width="0dp"
-            android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:text="@string/label_pick_image"/>
+            android:layout_weight="1"
+            android:text="@string/label_pick_image" />
 
         <Button
             android:id="@+id/btn_pick_crop"
             android:layout_width="0dp"
-            android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:text="@string/label_pick_and_crop"/>
+            android:layout_weight="1"
+            android:text="@string/label_pick_and_crop" />
 
     </LinearLayout>
 

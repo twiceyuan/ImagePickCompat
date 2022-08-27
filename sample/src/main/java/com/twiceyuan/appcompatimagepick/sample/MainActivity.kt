@@ -8,16 +8,10 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
-import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.ImageView
 import com.twiceyuan.appcompatimagepick.R
-import com.twiceyuan.imagepickcompat.ImagePick.clearImageDir
-import com.twiceyuan.imagepickcompat.ImagePick.crop
-import com.twiceyuan.imagepickcompat.ImagePick.handleResult
-import com.twiceyuan.imagepickcompat.ImagePick.pickGallery
-import com.twiceyuan.imagepickcompat.ImagePick.takePhoto
+import com.twiceyuan.imagepickcompat.ImagePick
 import java.io.IOException
 
 class MainActivity : Activity() {
@@ -37,41 +31,30 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
         initView()
         mBtnPick.setOnClickListener {
-            AlertDialog.Builder(this).setAdapter(
-                ArrayAdapter(
-                    this,
-                    R.layout.simple_list_item,
-                    listOf("从相机选择", "从相册选择")
-                )
-            ) { _: DialogInterface?, which: Int ->
-                if (which == 0) {
-                    takePhoto(this) { imageUri: Uri -> setImage(imageUri) }
-                }
-                if (which == 1) {
-                    pickGallery(this) { setImage(it) }
-                }
-            }.show()
+            showActionsMenu(mapOf(
+                "从相机选择" to { ImagePick.takePhoto(this) { setImage(it) } },
+                "从相册选择" to { ImagePick.pickGallery(this) { setImage(it) } }
+            ))
         }
         mBtnPickCrop.setOnClickListener {
-            AlertDialog.Builder(this).setAdapter(
-                ArrayAdapter(
-                    this,
-                    R.layout.simple_list_item,
-                    listOf("从相机选择并裁剪", "从相册选择并裁剪")
+            fun cropAndShowImage(uri: Uri?) {
+                ImagePick.crop(this, uri) { setImage(it) }
+            }
+            showActionsMenu(
+                mapOf(
+                    "从相机选择并裁剪" to { ImagePick.takePhoto(this) { cropAndShowImage(it) } },
+                    "从相册选择并裁剪" to { ImagePick.pickGallery(this) { cropAndShowImage(it) } },
                 )
-            ) { _: DialogInterface?, which: Int ->
-                if (which == 0) {
-                    takePhoto(this) { imageUri: Uri? ->
-                        crop(this, imageUri) { setImage(it) }
-                    }
-                }
-                if (which == 1) {
-                    pickGallery(this) { imageUri: Uri? ->
-                        crop(this, imageUri) { setImage(it) }
-                    }
-                }
-            }.show()
+            )
         }
+    }
+
+    private fun showActionsMenu(actions: Map<String, () -> Unit>) {
+        AlertDialog.Builder(this).setItems(
+            actions.keys.toTypedArray()
+        ) { _: DialogInterface?, which: Int ->
+            actions.values.toList()[which]()
+        }.show()
     }
 
     private fun setImage(imageUri: Uri) {
@@ -85,16 +68,16 @@ class MainActivity : Activity() {
         }
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent) {
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (handleResult(this, requestCode, resultCode, data)) {
+        if (ImagePick.handleResult(this, requestCode, resultCode, data)) {
             return
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        clearImageDir(this)
+        ImagePick.clearImageDir(this)
     }
 
     companion object {
