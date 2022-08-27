@@ -37,7 +37,7 @@ class MainActivity : Activity() {
             ))
         }
         mBtnPickCrop.setOnClickListener {
-            fun cropAndShowImage(uri: Uri?) {
+            fun cropAndShowImage(uri: Uri) {
                 ImagePick.crop(this, uri) { setImage(it) }
             }
             showActionsMenu(

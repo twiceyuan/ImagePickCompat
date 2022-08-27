@@ -1,7 +1,6 @@
 package com.twiceyuan.imagepickcompat
 
 import android.app.Activity
-import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -11,11 +10,16 @@ import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.util.Log
-import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.twiceyuan.imagepickcompat.options.CropOptions
-import com.twiceyuan.imagepickcompat.options.PickOptions
-import com.twiceyuan.imagepickcompat.options.TakeCameraOptions
+import com.twiceyuan.imagepickcompat.result.CropCallback
+import com.twiceyuan.imagepickcompat.result.CropResult
+import com.twiceyuan.imagepickcompat.result.PickCallback
+import com.twiceyuan.imagepickcompat.result.PickResult
+import com.twiceyuan.imagepickcompat.result.TakePhotoCallback
+import com.twiceyuan.imagepickcompat.result.TakePhotoResult
+import com.twiceyuan.imagepickcompat.result.onTakeCancel
+import com.twiceyuan.imagepickcompat.result.onTakeSuccess
 import com.twiceyuan.imagepickcompat.utils.FileProviderUtil.getUriByFileProvider
 import com.twiceyuan.imagepickcompat.utils.PermissionUtil.grantUriPermission
 import java.io.File
@@ -41,30 +45,19 @@ object ImagePick {
     private val sHandlerMap: MutableMap<Int, ResultHandler> = LinkedHashMap()
 
     fun pickGallery(activity: Activity, callback: (Uri) -> Unit) {
-        pickGallery(activity, PickOptions(), callback)
+        pickGallery(activity, PickCallback {
+            if (it is PickResult.Success) {
+                callback(it.uri)
+            }
+        })
     }
 
     @Suppress("MemberVisibilityCanBePrivate")
-    fun pickGallery(activity: Activity, options: PickOptions, callback: (Uri) -> Unit) {
-        if (options.pickAction != null) {
-            options.pickAction!!.invoke()
-        }
-
+    fun pickGallery(activity: Activity, callback: PickCallback) {
         //选择图库的图片
         val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
         val pickRequestCode = callback.hashCode()
-        try {
-            activity.startActivityForResult(intent, pickRequestCode)
-        } catch (e: ActivityNotFoundException) {
-            Log.e(TAG, "pickGallery", e)
-            val noGalleryCallback = options.noGalleryCallback
-            if (noGalleryCallback != null) {
-                noGalleryCallback.invoke()
-            } else {
-                Toast.makeText(activity, R.string.no_gallery_app, Toast.LENGTH_SHORT).show()
-            }
-            return
-        }
+        activity.startActivityForResult(intent, pickRequestCode)
         sHandlerMap[activity.hashCode()] = object : SimpleResultHandler(pickRequestCode) {
             override fun handle(data: Intent?) {
                 val originUri = data?.data
@@ -77,81 +70,70 @@ object ImagePick {
                     val bitmapFromUri = getBitmapFromUri(activity, originUri)
                     if (bitmapFromUri != null) {
                         val bitmapToFile = saveBitmapToFile(activity, bitmapFromUri)
-                        callback(getImageContentUri(activity, bitmapToFile))
+                        callback.onPick(
+                            PickResult.Success(
+                                getImageContentUri(
+                                    activity,
+                                    bitmapToFile
+                                )
+                            )
+                        )
                     } else {
-                        callback(originUri)
+                        callback.onPick(PickResult.Success(originUri))
                     }
                 } else {
-                    callback(originUri)
+                    callback.onPick(PickResult.Success(originUri))
                 }
             }
 
             override fun onCancel() {
-                if (options.cancelAction != null) {
-                    options.cancelAction!!.invoke()
-                } else {
-                    Toast.makeText(activity, R.string.cancel_choose, Toast.LENGTH_SHORT).show()
-                }
+                callback.onPick(PickResult.Cancelled)
             }
         }
     }
 
     fun takePhoto(activity: Activity, callback: (Uri) -> Unit) {
-        takePhoto(activity, TakeCameraOptions(), callback)
+        takePhoto(activity, TakePhotoCallback {
+            if (it is TakePhotoResult.Success) {
+                callback(it.uri)
+            }
+        })
     }
 
     @Suppress("MemberVisibilityCanBePrivate")
-    fun takePhoto(activity: Activity, options: TakeCameraOptions, callback: (Uri) -> Unit) {
-        options.takePhotoAction?.invoke()
+    fun takePhoto(activity: Activity, callback: TakePhotoCallback) {
+        kotlin.runCatching {
+            takePhotoInternal(activity, callback)
+        }.onFailure {
+            callback.onTake(TakePhotoResult.Unknown(it))
+        }
+    }
+
+    @Suppress("MemberVisibilityCanBePrivate")
+    fun takePhotoInternal(activity: Activity, callback: TakePhotoCallback) {
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
         if (intent.resolveActivity(activity.packageManager) == null) {
-            if (options.noCameraCallback != null) {
-                options.noCameraCallback!!.invoke()
-            } else {
-                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show()
-            }
+            callback.onTake(TakePhotoResult.NoCamera)
             return
         }
-        var photoFile: File? = null
-        try {
-            photoFile = createPhotoFile(activity)
-        } catch (e: IOException) {
-            Log.e(TAG, "takePhoto", e)
-        }
-        if (photoFile != null) {
-            val photoURI = FileProvider.getUriForFile(
-                activity,
-                activity.packageName + Constants.FILE_PROVIDER_NAME,
-                photoFile
-            )
-            val list = activity.packageManager.queryIntentActivities(intent, 0)
-            grantUriPermission(activity, list, photoURI)
-            intent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI)
-            val pickRequestCode = callback.hashCode()
-            try {
-                activity.startActivityForResult(intent, pickRequestCode)
-            } catch (e: ActivityNotFoundException) {
-                Log.e(TAG, "takePhoto", e)
-                if (options.noCameraCallback != null) {
-                    options.noCameraCallback!!.invoke()
-                } else {
-                    Toast.makeText(activity, R.string.no_camera_app, Toast.LENGTH_SHORT).show()
-                }
-                return
+        val photoFile: File = createPhotoFile(activity)
+        val photoURI = FileProvider.getUriForFile(
+            activity,
+            activity.packageName + Constants.FILE_PROVIDER_NAME,
+            photoFile
+        )
+        val list = activity.packageManager.queryIntentActivities(intent, 0)
+        grantUriPermission(activity, list, photoURI)
+        intent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI)
+        val pickRequestCode = callback.hashCode()
+        activity.startActivityForResult(intent, pickRequestCode)
+        sHandlerMap[activity.hashCode()] = object : SimpleResultHandler(pickRequestCode) {
+            override fun handle(data: Intent?) {
+                callback.onTakeSuccess(photoURI)
             }
-            sHandlerMap[activity.hashCode()] = object : SimpleResultHandler(pickRequestCode) {
-                override fun handle(data: Intent?) {
-                    callback(photoURI)
-                }
 
-                override fun onCancel() {
-                    if (options.cancelAction != null) {
-                        options.cancelAction!!.invoke()
-                    } else {
-                        Toast.makeText(activity, R.string.cancel_take_photo, Toast.LENGTH_SHORT)
-                            .show()
-                    }
-                }
+            override fun onCancel() {
+                callback.onTakeCancel()
             }
         }
     }
@@ -162,8 +144,27 @@ object ImagePick {
      *
      * other see [ImagePick.crop]
      */
-    fun crop(activity: Activity, uri: Uri?, callback: (Uri) -> Unit) {
-        crop(activity, uri, CropOptions(), callback)
+    fun crop(activity: Activity, uri: Uri, callback: (Uri) -> Unit) {
+        crop(activity, uri, CropOptions()) {
+            if (it is CropResult.Success) {
+                callback(it.uri)
+            }
+        }
+    }
+
+    /**
+     * Crop use default options
+     *
+     *
+     * other see [ImagePick.crop]
+     */
+    @Suppress("MemberVisibilityCanBePrivate")
+    fun crop(activity: Activity, options: CropOptions, uri: Uri, callback: (Uri) -> Unit) {
+        crop(activity, uri, options) {
+            if (it is CropResult.Success) {
+                callback(it.uri)
+            }
+        }
     }
 
     /**
@@ -175,56 +176,42 @@ object ImagePick {
      * @param callback Crop result callback
      */
     @Suppress("MemberVisibilityCanBePrivate")
-    fun crop(activity: Activity, uri: Uri?, options: CropOptions, callback: (Uri) -> Unit) {
+    fun crop(activity: Activity, uri: Uri, options: CropOptions, callback: CropCallback) {
         val intent = Intent("com.android.camera.action.CROP")
-        intent.type = "image/*"
+        intent.setDataAndType(uri, "image/*")
         val list = activity.packageManager.queryIntentActivities(intent, 0)
         if (list.isEmpty()) {
-            if (options.noCropCallback != null) {
-                options.noCropCallback!!.invoke()
-            } else {
-                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            intent.data = uri
-            intent.putExtra("outputX", options.outputX)
-            intent.putExtra("outputY", options.outputY)
-            intent.putExtra("aspectX", options.aspectX)
-            intent.putExtra("aspectY", options.aspectY)
-            intent.putExtra("scale", options.scale)
-            intent.putExtra("return-data", false)
-            val cropFile: File = try {
-                createCropFile(activity)
-            } catch (e: IOException) {
-                Log.e(TAG, "crop", e)
-                Toast.makeText(activity, R.string.create_cache_fail, Toast.LENGTH_SHORT).show()
-                return
-            }
-            val outputUri = getUriByFileProvider(activity, cropFile)
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            grantUriPermission(activity, list, outputUri)
+            callback.onCrop(CropResult.NoCropHandler)
+            return
+        }
+        intent.putExtra("outputX", options.outputX)
+        intent.putExtra("outputY", options.outputY)
+        intent.putExtra("aspectX", options.aspectX)
+        intent.putExtra("aspectY", options.aspectY)
+        intent.putExtra("scale", options.scale)
+        intent.putExtra("return-data", false)
+        val cropFile: File = try {
+            createCropFile(activity)
+        } catch (e: IOException) {
+            callback.onCrop(CropResult.Unknown(e))
+            return
+        }
+        val outputUri = getUriByFileProvider(activity, cropFile)
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        grantUriPermission(activity, list, outputUri)
 
-            // 设置裁剪结果输出 uri
-            intent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri)
-            val cropRequestCode = callback.hashCode()
-            try {
-                activity.startActivityForResult(intent, cropRequestCode)
-            } catch (e: ActivityNotFoundException) {
-                Log.e(TAG, "crop", e)
-                Toast.makeText(activity, R.string.no_crop_app, Toast.LENGTH_SHORT).show()
-                return
+        // 设置裁剪结果输出 uri
+        intent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri)
+        val cropRequestCode = callback.hashCode()
+        activity.startActivityForResult(intent, cropRequestCode)
+        sHandlerMap[activity.hashCode()] = object : SimpleResultHandler(cropRequestCode) {
+            override fun handle(data: Intent?) {
+                callback.onCrop(CropResult.Success(outputUri))
             }
-            sHandlerMap[activity.hashCode()] = object : SimpleResultHandler(cropRequestCode) {
-                override fun handle(data: Intent?) {
-                    callback(outputUri)
-                }
 
-                override fun onCancel() {
-                    if (options.cancelCropCallback != null) {
-                        options.cancelCropCallback!!.invoke()
-                    }
-                }
+            override fun onCancel() {
+                callback.onCrop(CropResult.Cancelled)
             }
         }
     }

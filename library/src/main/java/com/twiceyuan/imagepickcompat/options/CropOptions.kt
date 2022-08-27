@@ -12,6 +12,4 @@ data class CropOptions(
     var aspectX: Int = 1,
     var aspectY: Int = 1,
     var scale: Boolean = true,
-    var noCropCallback: (() -> Unit)? = null,
-    var cancelCropCallback: (() -> Unit)? = null,
 )
