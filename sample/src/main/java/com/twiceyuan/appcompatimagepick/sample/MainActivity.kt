@@ -67,11 +67,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        ImagePick.clearImageDir(this)
-    }
-
     companion object {
         private const val TAG = "MainActivity"
     }

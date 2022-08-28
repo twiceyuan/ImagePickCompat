@@ -12,6 +12,9 @@ import android.provider.MediaStore
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import com.twiceyuan.imagepickcompat.options.CropOptions
 import com.twiceyuan.imagepickcompat.result.CropCallback
 import com.twiceyuan.imagepickcompat.result.CropResult
@@ -20,10 +23,8 @@ import com.twiceyuan.imagepickcompat.result.PickResult
 import com.twiceyuan.imagepickcompat.result.TakePhotoCallback
 import com.twiceyuan.imagepickcompat.result.TakePhotoResult
 import com.twiceyuan.imagepickcompat.utils.ActivityResult
-import com.twiceyuan.imagepickcompat.utils.CommonContract
 import com.twiceyuan.imagepickcompat.utils.FileProviderUtil.getUriByFileProvider
 import com.twiceyuan.imagepickcompat.utils.PermissionUtil.grantUriPermission
-import com.twiceyuan.imagepickcompat.utils.launchWithCallback
 import com.twiceyuan.imagepickcompat.utils.startWithCallback
 import java.io.File
 import java.io.FileDescriptor
@@ -73,33 +74,13 @@ object ImagePick {
      * 从相册选择图片
      */
     private fun pickGalleryInternal(activity: ComponentActivity, callback: PickCallback) {
+        activity.registerCleaner()
         //选择图库的图片
         val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
         intent.startWithCallback(activity) {
             when (it.resultCode) {
                 Activity.RESULT_OK -> {
-                    val originUri = it.result?.data ?: return@startWithCallback run {
-                        callback.onPick(PickResult.Unknown(unknownActivityResult(it)))
-                    }
-                    if (isRemoteUri(originUri) || isGooglePhotosUri(originUri)) {
-                        // 网络图片或者 Google Photos 的图片没有权限进行进一步操作，所以缓存保存到本地
-                        val bitmapFromUri = getBitmapFromUri(activity, originUri)
-                        if (bitmapFromUri != null) {
-                            val bitmapToFile = saveBitmapToFile(activity, bitmapFromUri)
-                            callback.onPick(
-                                PickResult.Success(
-                                    getImageContentUri(
-                                        activity,
-                                        bitmapToFile
-                                    )
-                                )
-                            )
-                        } else {
-                            callback.onPick(PickResult.Success(originUri))
-                        }
-                    } else {
-                        callback.onPick(PickResult.Success(originUri))
-                    }
+                    callback.onPick(onPickResultOk(activity, it))
                 }
                 Activity.RESULT_CANCELED -> {
                     callback.onPick(PickResult.Cancelled)
@@ -108,6 +89,27 @@ object ImagePick {
                     callback.onPick(PickResult.Unknown(unknownActivityResult(it)))
                 }
             }
+        }
+    }
+
+    private fun onPickResultOk(activity: ComponentActivity, result: ActivityResult): PickResult {
+        val originUri = result.result?.data
+            ?: return PickResult.Unknown(unknownActivityResult(result))
+
+        if (isRemoteUri(originUri) || isGooglePhotosUri(originUri)) {
+            // 网络图片或者 Google Photos 的图片没有权限进行进一步操作，所以缓存保存到本地
+            val bitmapFromUri = getBitmapFromUri(activity, originUri)
+                ?: return PickResult.Success(originUri)
+
+            val bitmapToFile = saveBitmapToFile(activity, bitmapFromUri)
+            return PickResult.Success(
+                getImageContentUri(
+                    activity,
+                    bitmapToFile
+                )
+            )
+        } else {
+            return (PickResult.Success(originUri))
         }
     }
 
@@ -135,6 +137,7 @@ object ImagePick {
     }
 
     private fun takePhotoInternal(activity: ComponentActivity, callback: TakePhotoCallback) {
+        activity.registerCleaner()
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
         if (intent.resolveActivity(activity.packageManager) == null) {
             callback.onTake(TakePhotoResult.NoCamera)
@@ -203,6 +206,28 @@ object ImagePick {
      */
     @Suppress("MemberVisibilityCanBePrivate")
     fun crop(activity: ComponentActivity, uri: Uri, options: CropOptions, callback: CropCallback) {
+        runCatching {
+            cropInternal(activity, uri, options, callback)
+        }.onFailure {
+            callback.onCrop(CropResult.Unknown(it))
+        }
+    }
+
+    /**
+     * Crop a image from a uri
+     *
+     * @param activity Context
+     * @param uri      Image Uri
+     * @param options  Crop options
+     * @param callback Crop result callback
+     */
+    private fun cropInternal(
+        activity: ComponentActivity,
+        uri: Uri,
+        options: CropOptions,
+        callback: CropCallback
+    ) {
+        activity.registerCleaner()
         val intent = Intent("com.android.camera.action.CROP")
         intent.setDataAndType(uri, "image/*")
         val list = activity.packageManager.queryIntentActivities(intent, 0)
@@ -229,7 +254,7 @@ object ImagePick {
 
         // 设置裁剪结果输出 uri
         intent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri)
-        CommonContract(intent).launchWithCallback(activity.activityResultRegistry, Unit) {
+        intent.startWithCallback(activity) {
             when (it.resultCode) {
                 Activity.RESULT_OK -> {
                     callback.onCrop(CropResult.Success(outputUri))
@@ -343,11 +368,7 @@ object ImagePick {
         return File.createTempFile(imageFileName, ".jpg", storageDir)
     }
 
-    /**
-     * 可以在选择图片的 onDestroy 中调用，清楚拍照的缓存
-     */
-    @JvmStatic
-    fun clearImageDir(context: Context) {
+    private fun clearImageDir(context: Context) {
         val storageDir = context.getDir(Constants.CACHE_DIR_NAME, Context.MODE_PRIVATE) ?: return
         val files = storageDir.listFiles()
         if (files != null) {
@@ -357,6 +378,19 @@ object ImagePick {
                 }
             }
         }
+    }
+
+    /**
+     * 注册 destroy 时的清除缓存操作
+     */
+    private fun ComponentActivity.registerCleaner() {
+        lifecycle.addObserver(object : LifecycleEventObserver {
+            override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
+                if (event == Lifecycle.Event.ON_DESTROY) {
+                    clearImageDir(this@registerCleaner)
+                }
+            }
+        })
     }
 
     /**
