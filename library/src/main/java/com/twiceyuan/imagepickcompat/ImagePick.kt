@@ -22,10 +22,11 @@ import com.twiceyuan.imagepickcompat.result.PickCallback
 import com.twiceyuan.imagepickcompat.result.PickResult
 import com.twiceyuan.imagepickcompat.result.TakePhotoCallback
 import com.twiceyuan.imagepickcompat.result.TakePhotoResult
-import com.twiceyuan.imagepickcompat.utils.ActivityResult
-import com.twiceyuan.imagepickcompat.utils.FileProviderUtil.getUriByFileProvider
-import com.twiceyuan.imagepickcompat.utils.PermissionUtil.grantUriPermission
-import com.twiceyuan.imagepickcompat.utils.startWithCallback
+import com.twiceyuan.imagepickcompat.ext.ActivityResult
+import com.twiceyuan.imagepickcompat.ext.getProviderAuthority
+import com.twiceyuan.imagepickcompat.ext.getUriByFileProvider
+import com.twiceyuan.imagepickcompat.ext.grantUriPermission
+import com.twiceyuan.imagepickcompat.ext.startWithCallback
 import java.io.File
 import java.io.FileDescriptor
 import java.io.FileNotFoundException
@@ -146,7 +147,7 @@ object ImagePick {
         val photoFile: File = createPhotoFile(activity)
         val photoURI = FileProvider.getUriForFile(
             activity,
-            activity.packageName + Constants.FILE_PROVIDER_NAME,
+            getProviderAuthority(activity),
             photoFile
         )
         val list = activity.packageManager.queryIntentActivities(intent, 0)
@@ -247,7 +248,7 @@ object ImagePick {
             callback.onCrop(CropResult.Unknown(e))
             return
         }
-        val outputUri = getUriByFileProvider(activity, cropFile)
+        val outputUri = cropFile.getUriByFileProvider(activity)
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         grantUriPermission(activity, list, outputUri)
