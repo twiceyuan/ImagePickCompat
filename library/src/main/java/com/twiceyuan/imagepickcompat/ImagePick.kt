@@ -121,6 +121,8 @@ object ImagePick {
         takePhoto(activity, TakePhotoCallback {
             if (it is TakePhotoResult.Success) {
                 callback(it.uri)
+            } else {
+                Log.d(TAG, "takePhoto: failed -> ${it.javaClass.name}")
             }
         })
     }
